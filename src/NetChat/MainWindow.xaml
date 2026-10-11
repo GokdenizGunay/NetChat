@@ -1,0 +1,32 @@
+<ui:FluentWindow x:Class="NetChat.MainWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:c="clr-namespace:NetChat.Controls"
+                 Title="NetChat 26"
+                 Width="1180" Height="760" MinWidth="760" MinHeight="520"
+                 WindowStartupLocation="CenterScreen"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowCornerPreference="Round"
+                 Icon="pack://application:,,,/Assets/netchat.ico">
+    <Window.TaskbarItemInfo>
+        <TaskbarItemInfo x:Name="Taskbar" />
+    </Window.TaskbarItemInfo>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar x:Name="TitleBar" Grid.Row="0" Title="NetChat 26" CloseWindowByDoubleClickOnIcon="False">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="pack://application:,,,/Assets/netchat.png" />
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
+
+        <Grid x:Name="Host" Grid.Row="1" />
+
+        <!-- Giriş ekranı uyarıları (USB çıkarıldı, bağlantı kesildi…) -->
+        <c:DialogHost x:Name="WindowDialogs" Grid.Row="0" Grid.RowSpan="2" />
+    </Grid>
+</ui:FluentWindow>

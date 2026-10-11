@@ -1,0 +1,33 @@
+﻿<Application x:Class="NetChat.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:conv="clr-namespace:NetChat.Converters"
+             ShutdownMode="OnExplicitShutdown">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ui:ThemesDictionary Theme="Dark" />
+                <ui:ControlsDictionary />
+                <ResourceDictionary Source="Styles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
+            <conv:BoolToVisibilityConverter x:Key="InvBoolToVis" Invert="True" />
+            <conv:NullToVisibilityConverter x:Key="NullToVis" />
+            <conv:NullToVisibilityConverter x:Key="InvNullToVis" Invert="True" />
+            <conv:ZeroToVisibilityConverter x:Key="ZeroToVis" />
+            <conv:CountTextConverter x:Key="CountText" />
+            <conv:KeyToBrushConverter x:Key="KeyToBrush" />
+            <conv:KeyToNameBrushConverter x:Key="KeyToNameBrush" />
+            <conv:StatusToSymbolConverter x:Key="StatusToSymbol" />
+            <conv:TimeTextConverter x:Key="TimeText" />
+            <conv:PathToThumbnailConverter x:Key="PathToThumb" />
+            <conv:FileIconConverter x:Key="FileIcon" />
+            <conv:TransferTextConverter x:Key="TransferText" />
+            <conv:EqualsToVisibilityConverter x:Key="EqualsToVis" />
+            <conv:ProgressToWidthConverter x:Key="ProgressToWidth" />
+            <conv:InitialsConverter x:Key="Initials" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

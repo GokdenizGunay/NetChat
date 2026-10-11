@@ -1,0 +1,685 @@
+<UserControl x:Class="NetChat.Views.ChatView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:c="clr-namespace:NetChat.Controls"
+             xmlns:m="clr-namespace:NetChat.Models"
+             xmlns:emoji="clr-namespace:Emoji.Wpf;assembly=Emoji.Wpf"
+             AllowDrop="True">
+    <UserControl.Resources>
+        <!-- Yazma alanı düğmeleri: metin kutusuyla aynı yükseklikte kare düğmeler, içerik tam ortada -->
+        <Style x:Key="ComposerButton" TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
+            <Setter Property="Width" Value="40" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Appearance" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+
+        <!-- Balonun yanında üzerine gelince beliren küçük yuvarlak eylem düğmeleri -->
+        <Style x:Key="HoverAction" TargetType="Button">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Margin" Value="2,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" CornerRadius="14" Background="{DynamicResource SubtleFillColorSecondaryBrush}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Balonun altındaki ifade çipi -->
+        <Style x:Key="ReactionChipButton" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Margin" Value="0,0,4,0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" CornerRadius="11" Padding="7,2" BorderThickness="1"
+                                Background="{DynamicResource SolidBackgroundFillColorTertiaryBrush}"
+                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource SolidBackgroundFillColorSecondaryBrush}" />
+                            </Trigger>
+                            <DataTrigger Binding="{Binding Mine}" Value="True">
+                                <Setter TargetName="Bg" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Mesaj şablonu: tarih ayırıcı + sistem mesajı + (eylemler + balon + ifadeler) -->
+        <DataTemplate x:Key="MessageTemplate" DataType="{x:Type m:ChatMessage}">
+            <StackPanel c:Anim.AppearOnLoad="True">
+                <Border Visibility="{Binding DateHeader, Converter={StaticResource NullToVis}}" HorizontalAlignment="Center"
+                        Margin="0,16,0,8" Padding="12,4" CornerRadius="10"
+                        Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <TextBlock Text="{Binding DateHeader}" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </Border>
+
+                <Border Visibility="{Binding IsSystem, Converter={StaticResource BoolToVis}}" HorizontalAlignment="Center"
+                        Margin="60,6" Padding="12,5" CornerRadius="8" Background="{DynamicResource SubtleFillColorSecondaryBrush}">
+                    <emoji:TextBlock Text="{Binding Text}" FontSize="12" TextWrapping="Wrap" TextAlignment="Center"
+                                     Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </Border>
+
+                <Grid x:Name="Row" Background="Transparent" HorizontalAlignment="Left" Margin="0,6,60,0"
+                      Visibility="{Binding IsSystem, Converter={StaticResource InvBoolToVis}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="1">
+                        <Border x:Name="Bubble" MaxWidth="560" MinWidth="80" Padding="10,6,10,5"
+                                CornerRadius="4,10,10,10" BorderThickness="1"
+                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                ContextMenuOpening="OnBubbleMenuOpening" MouseLeftButtonDown="OnBubbleMouseDown">
+                            <Border.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Yanıtla" Click="OnReplyClicked" Tag="reply">
+                                        <MenuItem.Icon><ui:SymbolIcon Symbol="ArrowReply20" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="İfade bırak" Click="OnReactMenuClicked" Tag="react">
+                                        <MenuItem.Icon><ui:SymbolIcon Symbol="EmojiAdd20" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Kopyala" Click="OnCopyClicked" Tag="copy">
+                                        <MenuItem.Icon><ui:SymbolIcon Symbol="Copy20" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Aç" Click="OnOpenFileClicked" Tag="open">
+                                        <MenuItem.Icon><ui:SymbolIcon Symbol="Open20" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Klasörde göster" Click="OnShowInFolderClicked" Tag="folder">
+                                        <MenuItem.Icon><ui:SymbolIcon Symbol="FolderOpen20" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Yeniden dene" Click="OnRetryClicked" Tag="retry">
+                                        <MenuItem.Icon><ui:SymbolIcon Symbol="ArrowClockwise20" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <Separator />
+                                    <MenuItem Header="Benden sil" Click="OnDeleteForMeClicked" Tag="deleteme">
+                                        <MenuItem.Icon><ui:SymbolIcon Symbol="Delete20" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Herkesten sil" Click="OnDeleteForAllClicked" Tag="deleteall">
+                                        <MenuItem.Icon><ui:SymbolIcon Symbol="DeleteDismiss20" /></MenuItem.Icon>
+                                    </MenuItem>
+                                </ContextMenu>
+                            </Border.ContextMenu>
+                            <StackPanel>
+                                <TextBlock Text="{Binding SenderName}" FontSize="12.5" FontWeight="SemiBold" Margin="0,0,0,2"
+                                           Foreground="{Binding SenderId, Converter={StaticResource KeyToNameBrush}}"
+                                           Visibility="{Binding ShowSender, Converter={StaticResource BoolToVis}}" />
+
+                                <!-- Yanıtlanan mesajın alıntısı (tıklayınca o mesaja gider) -->
+                                <Border x:Name="Quote" CornerRadius="6" Margin="0,2,0,6" Cursor="Hand" ClipToBounds="True"
+                                        Background="{DynamicResource SubtleFillColorSecondaryBrush}"
+                                        Visibility="{Binding HasReply, Converter={StaticResource BoolToVis}}"
+                                        MouseLeftButtonUp="OnQuoteClicked" ToolTip="Mesaja git">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="3" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Rectangle x:Name="QuoteBar" Fill="{Binding ReplySenderId, Converter={StaticResource KeyToNameBrush}}" />
+                                        <StackPanel Grid.Column="1" Margin="8,4,10,5">
+                                            <TextBlock x:Name="QuoteName" Text="{Binding ReplyDisplayName}" FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="{Binding ReplySenderId, Converter={StaticResource KeyToNameBrush}}" />
+                                            <emoji:TextBlock Text="{Binding ReplyText}" FontSize="12.5" Opacity="0.8" TextTrimming="CharacterEllipsis"
+                                                             MaxHeight="36" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Dosya -->
+                                <StackPanel Visibility="{Binding IsFile, Converter={StaticResource BoolToVis}}" Margin="0,2,0,2">
+                                    <Border CornerRadius="6" Margin="0,2,0,6" ClipToBounds="True" Cursor="Hand"
+                                            Visibility="{Binding IsImage, Converter={StaticResource BoolToVis}}"
+                                            MouseLeftButtonUp="OnImageClicked">
+                                        <Image Source="{Binding LocalPath, Converter={StaticResource PathToThumb}}" MaxHeight="320" MaxWidth="340"
+                                               Stretch="Uniform" HorizontalAlignment="Left" RenderOptions.BitmapScalingMode="HighQuality" />
+                                    </Border>
+                                    <Border x:Name="FileCard" CornerRadius="6" Padding="10,8" MinWidth="240"
+                                            Background="{DynamicResource SubtleFillColorSecondaryBrush}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <ui:SymbolIcon Symbol="{Binding FileName, Converter={StaticResource FileIcon}}" FontSize="28"
+                                                           VerticalAlignment="Center" />
+                                            <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding FileName}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock FontSize="11.5" Opacity="0.75" Margin="0,2,0,0">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding Converter="{StaticResource TransferText}">
+                                                            <Binding Path="Transfer" />
+                                                            <Binding Path="FileSizeText" />
+                                                            <Binding Path="Progress" />
+                                                            <Binding Path="IsOutgoing" />
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                                <ProgressBar Height="3" Margin="0,6,0,0" Minimum="0" Maximum="1" Value="{Binding Progress}"
+                                                             Visibility="{Binding Transfer, Converter={StaticResource EqualsToVis}, ConverterParameter=Transferring}" />
+                                            </StackPanel>
+                                            <ui:Button Grid.Column="2" Appearance="Transparent" Icon="{ui:SymbolIcon Open24}" Padding="6"
+                                                       ToolTip="Aç" AutomationProperties.Name="Aç" Click="OnOpenFileClicked"
+                                                       Visibility="{Binding Transfer, Converter={StaticResource EqualsToVis}, ConverterParameter=Completed}" />
+                                        </Grid>
+                                    </Border>
+                                </StackPanel>
+
+                                <!-- Metin: renkli emoji, tıklanabilir bağlantılar, etiket vurgusu -->
+                                <c:RichMessageText x:Name="Body" TextContent="{Binding DisplayText}" Mentions="{Binding Mentions}"
+                                                   FontSize="14" TextWrapping="Wrap" LineHeight="20"
+                                                   LinkBrush="{DynamicResource LinkIncomingBrush}"
+                                                   MentionBrush="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                                                   Visibility="{Binding IsText, Converter={StaticResource BoolToVis}}" />
+
+                                <!-- Saat + durum -->
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="12,1,0,0">
+                                    <TextBlock Text="{Binding TimeText}" FontSize="11" Opacity="0.7" VerticalAlignment="Center" />
+                                    <!-- Tikler vektör çizgi: kalınlık kontrol edilebilir. Bekliyor/başarısız için simge. -->
+                                    <Grid x:Name="StatusIcon" Margin="5,0,0,0" Width="18" Height="11" VerticalAlignment="Center" Visibility="Collapsed">
+                                        <ui:SymbolIcon x:Name="StateIcon" Symbol="{Binding Status, Converter={StaticResource StatusToSymbol}}" FontSize="13"
+                                                       HorizontalAlignment="Left" Margin="0,-3,0,0" Opacity="0.85" Visibility="Collapsed" />
+                                        <Path x:Name="Tick1" Data="M0.8,5.6 L3.8,8.6 L10.2,1.4" StrokeThickness="1.9" Opacity="0.85"
+                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                              Stroke="{Binding (TextElement.Foreground), RelativeSource={RelativeSource Self}}" />
+                                        <Path x:Name="Tick2" Data="M6.2,7.4 L7.4,8.6 L13.8,1.4" StrokeThickness="1.9" Opacity="0.85"
+                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Visibility="Collapsed"
+                                              Stroke="{Binding (TextElement.Foreground), RelativeSource={RelativeSource Self}}" />
+                                    </Grid>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- İfadeler -->
+                        <ItemsControl x:Name="Reactions" ItemsSource="{Binding ReactionChips}" Margin="8,-3,8,0" HorizontalAlignment="Left"
+                                      Visibility="{Binding HasReactions, Converter={StaticResource BoolToVis}}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource ReactionChipButton}" Click="OnReactionChipClicked" ToolTip="{Binding Names}"
+                                            AutomationProperties.Name="{Binding Emoji}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <emoji:TextBlock Text="{Binding Emoji}" FontSize="13" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding Count}" FontSize="11.5" Margin="4,0,0,0" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- Üzerine gelince: ifade bırak / yanıtla -->
+                    <StackPanel x:Name="Actions" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0"
+                                Opacity="0" IsHitTestVisible="False">
+                        <Button Style="{StaticResource HoverAction}" Click="OnReactButtonClicked" ToolTip="İfade bırak" AutomationProperties.Name="İfade bırak">
+                            <ui:SymbolIcon Symbol="EmojiAdd20" FontSize="16" />
+                        </Button>
+                        <Button Style="{StaticResource HoverAction}" Click="OnReplyClicked" ToolTip="Yanıtla" AutomationProperties.Name="Yanıtla">
+                            <ui:SymbolIcon Symbol="ArrowReply20" FontSize="16" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsOutgoing}" Value="True">
+                    <Setter TargetName="Row" Property="HorizontalAlignment" Value="Right" />
+                    <Setter TargetName="Row" Property="Margin" Value="60,6,0,0" />
+                    <Setter TargetName="Actions" Property="Grid.Column" Value="0" />
+                    <Setter TargetName="Reactions" Property="HorizontalAlignment" Value="Right" />
+                    <Setter TargetName="Bubble" Property="CornerRadius" Value="10,4,10,10" />
+                    <Setter TargetName="Bubble" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                    <Setter TargetName="Bubble" Property="BorderBrush" Value="Transparent" />
+                    <Setter TargetName="Bubble" Property="TextElement.Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                    <Setter TargetName="Body" Property="LinkBrush" Value="{DynamicResource LinkOutgoingBrush}" />
+                    <Setter TargetName="Body" Property="MentionBrush" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                    <Setter TargetName="Quote" Property="Background" Value="#22000000" />
+                    <Setter TargetName="QuoteBar" Property="Fill" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                    <Setter TargetName="QuoteName" Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                    <Setter TargetName="StatusIcon" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="FileCard" Property="Background" Value="#26FFFFFF" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsFirstInRun}" Value="False">
+                    <Setter TargetName="Row" Property="Margin" Value="0,2,60,0" />
+                    <Setter TargetName="Bubble" Property="CornerRadius" Value="10" />
+                </DataTrigger>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding IsFirstInRun}" Value="False" />
+                        <Condition Binding="{Binding IsOutgoing}" Value="True" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter TargetName="Row" Property="Margin" Value="60,2,0,0" />
+                </MultiDataTrigger>
+                <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Actions" Property="Opacity" Value="1" />
+                    <Setter TargetName="Actions" Property="IsHitTestVisible" Value="True" />
+                </Trigger>
+                <DataTrigger Binding="{Binding IsDeleted}" Value="True">
+                    <Setter TargetName="Actions" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="Body" Property="FontStyle" Value="Italic" />
+                    <Setter TargetName="Body" Property="Opacity" Value="0.7" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
+                    <Setter TargetName="Bubble" Property="BorderBrush" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                    <Setter TargetName="Bubble" Property="BorderThickness" Value="3" />
+                </DataTrigger>
+                <!-- Mavi (giden) balonda mavi çerçeve seçilmiyor: yeşil kullan -->
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding IsHighlighted}" Value="True" />
+                        <Condition Binding="{Binding IsOutgoing}" Value="True" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter TargetName="Bubble" Property="BorderBrush" Value="#22C55E" />
+                </MultiDataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="Delivered">
+                    <Setter TargetName="Tick2" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="Read">
+                    <Setter TargetName="Tick2" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="Tick1" Property="Stroke" Value="{DynamicResource ReadTickBrush}" />
+                    <Setter TargetName="Tick2" Property="Stroke" Value="{DynamicResource ReadTickBrush}" />
+                    <Setter TargetName="Tick1" Property="StrokeThickness" Value="2.1" />
+                    <Setter TargetName="Tick2" Property="StrokeThickness" Value="2.1" />
+                    <Setter TargetName="Tick1" Property="Opacity" Value="1" />
+                    <Setter TargetName="Tick2" Property="Opacity" Value="1" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="Pending">
+                    <Setter TargetName="Tick1" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="StateIcon" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="Failed">
+                    <Setter TargetName="Tick1" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="StateIcon" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="StateIcon" Property="Foreground" Value="#FFE5484D" />
+                    <Setter TargetName="StateIcon" Property="Opacity" Value="1" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- Grup üyesi -->
+        <DataTemplate x:Key="MemberTemplate">
+            <Grid Margin="0,3" Height="44" Background="Transparent">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <c:Avatar Size="36" Text="{Binding Initials}" Key="{Binding Id}" ShowPresence="True"
+                          IsOnline="{Binding Peer.ShowOnlineDot, FallbackValue=False}" IsIdle="{Binding Peer.ShowIdleDot, FallbackValue=False}" />
+                <StackPanel Grid.Column="1" Margin="10,0,6,0" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding DisplayName}" FontSize="13.5" TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    <TextBlock Text="{Binding RoleText}" FontSize="11.5" Visibility="{Binding RoleText, Converter={StaticResource NullToVis}}"
+                               Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                </StackPanel>
+                <ui:Button Grid.Column="2" Appearance="Transparent" Icon="{ui:SymbolIcon MoreHorizontal20}" Padding="6"
+                           Visibility="{Binding HasActions, Converter={StaticResource BoolToVis}}" Click="OnMemberMenuClicked"
+                           ToolTip="Üye seçenekleri" AutomationProperties.Name="{Binding Name, StringFormat='Üye seçenekleri: {0}'}" />
+            </Grid>
+        </DataTemplate>
+
+        <!-- Etiket önerisi -->
+        <DataTemplate x:Key="MentionTemplate" DataType="{x:Type m:GroupMember}">
+            <StackPanel Orientation="Horizontal">
+                <c:Avatar Size="26" Text="{Binding Name, Converter={StaticResource Initials}}" Key="{Binding Id}" />
+                <TextBlock Text="{Binding Name}" Margin="10,0,0,0" FontSize="13.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid Background="Transparent">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <Grid x:Name="MainArea">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Başlık -->
+            <Border Grid.Row="0" Padding="16,10,10,10" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <c:Avatar x:Name="HeaderAvatar" Size="40" ShowPresence="True" Cursor="Hand" MouseLeftButtonUp="OnHeaderClicked" />
+                    <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" Cursor="Hand" Background="Transparent"
+                                MouseLeftButtonUp="OnHeaderClicked">
+                        <StackPanel Orientation="Horizontal">
+                            <emoji:TextBlock x:Name="HeaderTitle" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                             Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                            <ui:SymbolIcon x:Name="HeaderMuted" Symbol="AlertOff20" FontSize="14" Margin="8,1,0,0" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}" Visibility="Collapsed"
+                                           ToolTip="Sessize alındı" />
+                        </StackPanel>
+                        <TextBlock x:Name="HeaderSubtitle" FontSize="12" Margin="0,1,0,0" TextTrimming="CharacterEllipsis"
+                                   Text="{Binding Subtitle}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="LockClosed20" FontSize="14" Margin="0,0,10,0" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                       ToolTip="Mesajlaşmalarınız şifrelidir" AutomationProperties.Name="Mesajlaşmalarınız şifrelidir" />
+                        <ui:Button x:Name="InfoButton" Appearance="Transparent" Icon="{ui:SymbolIcon Info24}" Padding="8"
+                                   ToolTip="Bilgi" AutomationProperties.Name="Bilgi" Click="OnInfoClicked" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Mesajlar -->
+            <Grid Grid.Row="1">
+                <ListBox x:Name="Messages" Style="{StaticResource BareListBox}" ItemContainerStyle="{StaticResource MessageListItem}"
+                         ItemTemplate="{StaticResource MessageTemplate}" Padding="20,6,20,14"
+                         VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.ScrollUnit="Pixel"
+                         VirtualizingPanel.VirtualizationMode="Standard" ScrollViewer.CanContentScroll="True" />
+
+                <StackPanel x:Name="NoMessages" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed" Margin="24">
+                    <Border Padding="18,14" CornerRadius="8" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" MaxWidth="360">
+                        <StackPanel>
+                            <ui:SymbolIcon Symbol="ShieldLock24" FontSize="28" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                            <TextBlock Text="Mesajlaşmalarınız şifrelidir" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,8,0,4"
+                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                            <TextBlock TextWrapping="Wrap" TextAlignment="Center" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Text="Bu sohbetteki mesajları ve dosyaları yalnızca siz ve alıcılar okuyabilir. Veriler sunucuya değil, doğrudan yerel ağ üzerinden gönderilir." />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <ui:Button x:Name="ScrollDownButton" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,24,14"
+                           Width="40" Height="40" Padding="0" CornerRadius="20" Icon="{ui:SymbolIcon ArrowDown24}"
+                           Visibility="Collapsed" Click="OnScrollDownClicked" ToolTip="En alta git" AutomationProperties.Name="En alta git" />
+                <Border x:Name="NewBadge" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,18,44"
+                        Style="{StaticResource Badge}" Visibility="Collapsed" IsHitTestVisible="False">
+                    <TextBlock x:Name="NewBadgeText" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                </Border>
+
+                <!-- Sürükle-bırak katmanı -->
+                <Grid x:Name="DropOverlay" Visibility="Collapsed" Margin="12" IsHitTestVisible="False">
+                    <!-- Arkadaki mesajlar/kutu görünmesin diye neredeyse opak zemin, üstünde vurgu rengi -->
+                    <Border CornerRadius="10" Opacity="0.94" Background="{DynamicResource SolidBackgroundFillColorBaseBrush}" />
+                    <Border CornerRadius="10" BorderThickness="2" BorderBrush="{DynamicResource AccentFillColorDefaultBrush}">
+                        <Border.Background>
+                            <SolidColorBrush Color="{DynamicResource SystemAccentColor}" Opacity="0.14" />
+                        </Border.Background>
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <ui:SymbolIcon Symbol="ArrowUpload24" FontSize="40" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                            <TextBlock Text="Göndermek için dosyaları bırakın" FontSize="16" FontWeight="SemiBold" Margin="0,10,0,0"
+                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Grid>
+
+            <!-- Karşı taraf yazıyor: gelen balon görünümünde animasyonlu üç nokta -->
+            <Border x:Name="TypingBubble" Grid.Row="2" HorizontalAlignment="Left" Margin="20,0,0,6" Padding="14,0"
+                    Height="34" CornerRadius="4,14,14,14" BorderThickness="1" Visibility="Collapsed"
+                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                    AutomationProperties.Name="Yazıyor">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock x:Name="TypingName" FontSize="12" Margin="0,0,8,0" VerticalAlignment="Center" Visibility="Collapsed"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <Ellipse x:Name="Dot1" Width="7" Height="7" Fill="{DynamicResource TextFillColorSecondaryBrush}" RenderTransformOrigin="0.5,0.5">
+                        <Ellipse.RenderTransform><TranslateTransform /></Ellipse.RenderTransform>
+                    </Ellipse>
+                    <Ellipse x:Name="Dot2" Width="7" Height="7" Margin="5,0" Fill="{DynamicResource TextFillColorSecondaryBrush}" RenderTransformOrigin="0.5,0.5">
+                        <Ellipse.RenderTransform><TranslateTransform /></Ellipse.RenderTransform>
+                    </Ellipse>
+                    <Ellipse x:Name="Dot3" Width="7" Height="7" Fill="{DynamicResource TextFillColorSecondaryBrush}" RenderTransformOrigin="0.5,0.5">
+                        <Ellipse.RenderTransform><TranslateTransform /></Ellipse.RenderTransform>
+                    </Ellipse>
+                </StackPanel>
+            </Border>
+
+            <!-- Yazma alanı -->
+            <Grid Grid.Row="3">
+                <Border x:Name="BlockedBar" Padding="16,14" Visibility="Collapsed" BorderThickness="0,1,0,0"
+                        BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <ui:SymbolIcon Symbol="Prohibited20" FontSize="16" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <TextBlock x:Name="BlockedText" Margin="8,0,0,0" FontSize="13" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <ui:Button x:Name="UnblockButton" Content="Engeli kaldır" Margin="12,0,0,0" Visibility="Collapsed"
+                                   Click="OnUnblockClicked" />
+                    </StackPanel>
+                </Border>
+
+                <StackPanel x:Name="Composer" Margin="14,4,14,14">
+                    <!-- Yanıtlanan mesaj -->
+                    <Border x:Name="ReplyBar" Visibility="Collapsed" Margin="0,0,0,6" CornerRadius="8" BorderThickness="1"
+                            Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" ClipToBounds="True">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="3" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Rectangle x:Name="ReplyBarAccent" Fill="{DynamicResource AccentFillColorDefaultBrush}" />
+                            <StackPanel Grid.Column="1" Margin="10,6,8,7" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <ui:SymbolIcon Symbol="ArrowReply20" FontSize="13" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                    <TextBlock x:Name="ReplyBarName" Margin="5,0,0,0" FontSize="12.5" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                </StackPanel>
+                                <emoji:TextBlock x:Name="ReplyBarText" FontSize="12.5" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"
+                                                 Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                            <ui:Button Grid.Column="2" Appearance="Transparent" Width="32" Height="32" Padding="0" Margin="0,0,6,0"
+                                       VerticalAlignment="Center" Click="OnCancelReplyClicked" ToolTip="Yanıtı iptal et"
+                                       AutomationProperties.Name="Yanıtı iptal et">
+                                <ui:SymbolIcon Symbol="Dismiss20" FontSize="14" />
+                            </ui:Button>
+                        </Grid>
+                    </Border>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ui:Button x:Name="EmojiButton" Style="{StaticResource ComposerButton}"
+                                   ToolTip="Emoji" AutomationProperties.Name="Emoji" Click="OnEmojiClicked">
+                            <ui:SymbolIcon Symbol="Emoji24" FontSize="20" />
+                        </ui:Button>
+                        <ui:Button x:Name="AttachButton" Grid.Column="1" Style="{StaticResource ComposerButton}" Margin="2,0,0,0"
+                                   ToolTip="Dosya gönder" AutomationProperties.Name="Dosya gönder" Click="OnAttachClicked">
+                            <ui:SymbolIcon Symbol="Add24" FontSize="20" />
+                        </ui:Button>
+                        <!-- Çok satırlı, renkli emoji destekli giriş: Enter gönderir, Shift+Enter yeni satır açar -->
+                        <c:MessageInput x:Name="Input" Grid.Column="2" Margin="6,0" VerticalAlignment="Bottom"
+                                        PreviewKeyDown="OnInputKeyDown" TextChanged="OnInputChanged" SelectionChanged="OnInputSelectionChanged" />
+                        <ui:Button x:Name="SendButton" Grid.Column="3" Style="{StaticResource ComposerButton}" Appearance="Primary"
+                                   ToolTip="Gönder (Enter)" AutomationProperties.Name="Gönder (Enter)" Click="OnSendClicked" IsEnabled="False">
+                            <ui:SymbolIcon Symbol="Send20" FontSize="18" />
+                        </ui:Button>
+                    </Grid>
+                </StackPanel>
+
+                <Popup x:Name="EmojiPopup" PlacementTarget="{Binding ElementName=EmojiButton}" Placement="Top" VerticalOffset="-8"
+                       StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                    <c:EmojiPicker x:Name="EmojiPicker" Margin="8" />
+                </Popup>
+
+                <!-- Grup etiketleme önerileri -->
+                <Popup x:Name="MentionPopup" PlacementTarget="{Binding ElementName=Input}" Placement="Top" VerticalOffset="-6"
+                       StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                    <Border Margin="8" Padding="4" Width="260" CornerRadius="8" BorderThickness="1"
+                            Background="{DynamicResource SolidBackgroundFillColorTertiaryBrush}"
+                            BorderBrush="{DynamicResource SurfaceStrokeColorFlyoutBrush}">
+                        <ListBox x:Name="MentionList" Style="{StaticResource BareListBox}" ItemContainerStyle="{StaticResource NavListItem}"
+                                 ItemTemplate="{StaticResource MentionTemplate}" MaxHeight="230" Focusable="False"
+                                 PreviewMouseLeftButtonUp="OnMentionClicked" />
+                    </Border>
+                </Popup>
+            </Grid>
+
+            <!-- Hızlı ifade seçici -->
+            <Popup x:Name="ReactionPopup" Placement="Top" VerticalOffset="-4" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                <Border Margin="8" Padding="4" CornerRadius="22" BorderThickness="1"
+                        Background="{DynamicResource SolidBackgroundFillColorTertiaryBrush}"
+                        BorderBrush="{DynamicResource SurfaceStrokeColorFlyoutBrush}">
+                    <StackPanel x:Name="QuickReactions" Orientation="Horizontal" />
+                </Border>
+            </Popup>
+            <Popup x:Name="ReactionPickerPopup" Placement="Top" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                <c:EmojiPicker x:Name="ReactionPicker" Margin="8" />
+            </Popup>
+        </Grid>
+
+        <!-- Bilgi paneli -->
+        <!-- Bilgi panelini yeniden boyutlandırma: sol kenardaki çizgiden sürüklenir -->
+        <Thumb x:Name="InfoSplitter" Grid.Column="1" Width="6" Margin="-3,0,0,0" HorizontalAlignment="Left" Panel.ZIndex="1"
+               Cursor="SizeWE" Visibility="Collapsed" AutomationProperties.Name="Bilgi paneli genişliği"
+               DragDelta="OnInfoSplitterDragDelta" DragCompleted="OnInfoSplitterDragCompleted">
+            <Thumb.Template>
+                <ControlTemplate TargetType="Thumb">
+                    <Border Background="Transparent" />
+                </ControlTemplate>
+            </Thumb.Template>
+        </Thumb>
+
+        <Border x:Name="InfoPanel" Grid.Column="1" Width="0" BorderThickness="1,0,0,0" ClipToBounds="True"
+                BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}">
+            <Grid x:Name="InfoContent" Width="320" HorizontalAlignment="Left">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid Margin="16,12,8,4">
+                    <TextBlock x:Name="InfoTitle" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    <ui:Button HorizontalAlignment="Right" Appearance="Transparent" Icon="{ui:SymbolIcon Dismiss20}" Padding="8"
+                               Click="OnInfoClicked" ToolTip="Kapat" AutomationProperties.Name="Kapat" />
+                </Grid>
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="16,0,22,16">
+                    <StackPanel>
+                        <c:Avatar x:Name="InfoAvatar" Size="88" HorizontalAlignment="Center" Margin="0,12,0,10" />
+                        <emoji:TextBlock x:Name="InfoName" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" TextWrapping="Wrap"
+                                         TextAlignment="Center" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        <TextBlock x:Name="InfoSub" FontSize="12.5" HorizontalAlignment="Center" Margin="0,4,0,0" TextAlignment="Center" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+
+                        <!-- Grup -->
+                        <StackPanel x:Name="GroupInfo">
+                            <emoji:TextBlock x:Name="GroupDesc" Margin="0,12,0,0" FontSize="13" TextWrapping="Wrap" TextAlignment="Center"
+                                             Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+
+                            <StackPanel x:Name="EditInfoPanel" Margin="0,14,0,0">
+                                <TextBlock Text="Grup bilgileri" Style="{StaticResource SectionHeader}" Margin="2,4,0,6" />
+                                <ui:TextBox x:Name="GroupNameBox" PlaceholderText="Grup adı" MaxLength="48" />
+                                <ui:TextBox x:Name="GroupDescBox" PlaceholderText="Açıklama" MaxLength="200" Margin="0,6,0,0"
+                                            TextWrapping="Wrap" AcceptsReturn="False" />
+                                <ui:Button Content="Kaydet" Margin="0,8,0,0" HorizontalAlignment="Right" Click="OnSaveGroupInfoClicked" />
+                            </StackPanel>
+
+                            <StackPanel x:Name="AdminPanel" Margin="0,4,0,0">
+                                <TextBlock Text="Grup ayarları" Style="{StaticResource SectionHeader}" Margin="2,10,0,6" />
+                                <ui:CardControl Padding="12,10" Margin="0,0,0,4">
+                                    <ui:CardControl.Header>
+                                        <TextBlock Text="Yalnızca yöneticiler mesaj gönderebilir" TextWrapping="Wrap" FontSize="13" />
+                                    </ui:CardControl.Header>
+                                    <ui:ToggleSwitch x:Name="OnlyAdminsSendToggle" Checked="OnOnlyAdminsSendClicked" Unchecked="OnOnlyAdminsSendClicked" AutomationProperties.Name="Yalnızca yöneticiler mesaj gönderebilir" />
+                                </ui:CardControl>
+                                <ui:CardControl Padding="12,10">
+                                    <ui:CardControl.Header>
+                                        <TextBlock Text="Grup bilgilerini yalnızca yöneticiler düzenleyebilir" TextWrapping="Wrap" FontSize="13" />
+                                    </ui:CardControl.Header>
+                                    <ui:ToggleSwitch x:Name="OnlyAdminsEditToggle" Checked="OnOnlyAdminsEditClicked" Unchecked="OnOnlyAdminsEditClicked" AutomationProperties.Name="Grup bilgilerini yalnızca yöneticiler düzenleyebilir" />
+                                </ui:CardControl>
+                            </StackPanel>
+
+                            <Grid Margin="0,18,0,6">
+                                <TextBlock x:Name="MembersHeader" Style="{StaticResource SectionHeader}" Margin="2,0,0,0" VerticalAlignment="Center" />
+                                <ui:Button x:Name="AddMembersButton" HorizontalAlignment="Right" Appearance="Transparent" Padding="8,4"
+                                           Icon="{ui:SymbolIcon PersonAdd20}" Content="Ekle" Click="OnAddMembersClicked" />
+                            </Grid>
+                            <ItemsControl x:Name="MembersList" ItemTemplate="{StaticResource MemberTemplate}" />
+                        </StackPanel>
+
+                        <!-- Kişi -->
+                        <StackPanel x:Name="PeerInfo">
+                            <TextBlock Text="Bağlantı" Style="{StaticResource SectionHeader}" />
+                            <ui:CardControl Padding="12,10" Icon="{ui:SymbolIcon Desktop20}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="Adres" FontSize="13" />
+                                        <TextBlock x:Name="PeerAddress" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                            </ui:CardControl>
+
+                            <TextBlock Text="Güvenlik kodu" Style="{StaticResource SectionHeader}" />
+                            <Border Padding="12" CornerRadius="6" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Text="Bu kodu karşı tarafın cihazındaki kodla karşılaştırın. Eşleşiyorsa bağlantınız şifreli ve doğrulanmıştır." />
+                                    <c:SecurityCodeView x:Name="PeerCode" CodeFontSize="13" Margin="0,10,0,0" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Ortak eylemler -->
+                        <ui:Button x:Name="MuteButton" Margin="0,16,0,0" HorizontalAlignment="Stretch" Click="OnMuteClicked" />
+                        <ui:Button x:Name="BlockButton" Margin="0,6,0,0" HorizontalAlignment="Stretch" Click="OnBlockClicked"
+                                   Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
+                        <ui:Button x:Name="LeaveButton" Content="Gruptan ayrıl" Icon="{ui:SymbolIcon SignOut20}" Margin="0,6,0,0"
+                                   HorizontalAlignment="Stretch" Click="OnLeaveClicked" Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
+                        <ui:Button x:Name="DisbandButton" Content="Grubu dağıt" Icon="{ui:SymbolIcon PeopleTeamDelete20}" Margin="0,6,0,0"
+                                   HorizontalAlignment="Stretch" Appearance="Danger" Click="OnDisbandClicked" />
+                        <ui:Button x:Name="ClearButton" Content="Sohbeti temizle" Icon="{ui:SymbolIcon DeleteLines20}" Margin="0,6,0,0"
+                                   HorizontalAlignment="Stretch" Click="OnClearClicked" />
+                        <ui:Button x:Name="DeleteButton" Content="Sohbeti sil" Icon="{ui:SymbolIcon Delete20}" Margin="0,6,0,0"
+                                   HorizontalAlignment="Stretch" Click="OnDeleteClicked" Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

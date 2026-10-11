@@ -1,0 +1,43 @@
+<UserControl x:Class="NetChat.Controls.PeerPicker"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:c="clr-namespace:NetChat.Controls">
+    <StackPanel>
+        <ui:TextBox x:Name="SearchBox" PlaceholderText="Kişi ara" Icon="{ui:SymbolIcon Search24}" Margin="0,0,0,8"
+                    TextChanged="OnSearchChanged" />
+        <TextBlock x:Name="EmptyText" Visibility="Collapsed" Margin="4,12" TextWrapping="Wrap" FontSize="13"
+                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                   Text="Eklenebilecek kişi yok. Ağdaki diğer NetChat kullanıcıları burada görünür." />
+        <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
+            <ItemsControl x:Name="List">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" IsEnabled="{Binding IsAllowed}" Margin="2,3" Padding="8,0,0,0" AutomationProperties.Name="{Binding Peer.Name}"
+                                  HorizontalContentAlignment="Stretch" Checked="OnCheckedChanged" Unchecked="OnCheckedChanged">
+                            <CheckBox.Style>
+                                <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+                                    <Style.Triggers>
+                                        <!-- Gruplara eklenemeyen kişi: silik ve seçilemez -->
+                                        <DataTrigger Binding="{Binding IsAllowed}" Value="False">
+                                            <Setter Property="Opacity" Value="0.45" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </CheckBox.Style>
+                            <StackPanel Orientation="Horizontal">
+                                <c:Avatar Size="32" Text="{Binding Peer.Initials}" Key="{Binding Peer.Id}" ShowPresence="True"
+                                          IsOnline="{Binding Peer.ShowOnlineDot}" IsIdle="{Binding Peer.ShowIdleDot}" />
+                                <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Peer.Name}" FontSize="14" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                    <TextBlock FontSize="11" Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </CheckBox>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </StackPanel>
+</UserControl>

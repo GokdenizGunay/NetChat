@@ -1,0 +1,147 @@
+<UserControl x:Class="NetChat.Views.WelcomeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+    <UserControl.Resources>
+        <Style x:Key="FormTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        </Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Margin" Value="2,10,0,4" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Style>
+        <Style x:Key="ErrorLine" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Margin" Value="2,10,0,0" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <!-- Hafif, temaya uyumlu vurgu degradesi -->
+        <Rectangle IsHitTestVisible="False" Opacity="0.10">
+            <Rectangle.Fill>
+                <RadialGradientBrush Center="0.5,0.35" GradientOrigin="0.5,0.35" RadiusX="0.7" RadiusY="0.8">
+                    <GradientStop Offset="0" Color="{DynamicResource SystemAccentColor}" />
+                    <GradientStop Offset="1" Color="Transparent" />
+                </RadialGradientBrush>
+            </Rectangle.Fill>
+        </Rectangle>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24,24,24,48" Width="380">
+                <TextBlock x:Name="TitleText" Text="NetChat 26" FontSize="28" FontWeight="SemiBold" HorizontalAlignment="Center"
+                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                <TextBlock x:Name="SubtitleText" Text="Yerel ağınızdaki diğer cihazlar ile sohbet edin" FontSize="16" Margin="0,6,0,0"
+                           HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+
+                <StackPanel x:Name="StatusPanel" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,14,0,0">
+                    <Grid Width="18" Height="18" VerticalAlignment="Center">
+                        <ui:SymbolIcon x:Name="WifiIcon" Symbol="Wifi124" FontSize="17" Visibility="Collapsed" />
+                        <ui:FontIcon x:Name="WiredIcon" Glyph="&#xE839;" FontFamily="{StaticResource IconFont}" FontSize="16" Visibility="Collapsed" />
+                        <ui:SymbolIcon x:Name="OfflineIcon" Symbol="GlobeProhibited24" FontSize="17" Visibility="Collapsed" />
+                    </Grid>
+                    <TextBlock x:Name="StatusText" Margin="6,0,0,0" FontSize="14" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                </StackPanel>
+
+                <Grid Margin="0,56,0,0" MinHeight="120">
+                    <!-- 1. Başlangıç: iki seçenek yan yana -->
+                    <UniformGrid x:Name="HomePanel" Columns="2" VerticalAlignment="Top" HorizontalAlignment="Center" Width="320">
+                        <ui:Button x:Name="LoginButton" Content="Giriş Yap" Appearance="Primary" Icon="{ui:SymbolIcon Person24}"
+                                   HorizontalAlignment="Stretch" Margin="0,0,5,0" Padding="12,9" FontSize="14" Click="OnShowLoginClicked" />
+                        <ui:Button x:Name="NewProfileButton" Content="Yeni Profil" Icon="{ui:SymbolIcon PersonAdd24}"
+                                   HorizontalAlignment="Stretch" Margin="5,0,0,0" Padding="12,9" FontSize="14" Click="OnShowNewClicked" />
+                    </UniformGrid>
+
+                    <!-- 2. Giriş -->
+                    <StackPanel x:Name="LoginPanel" Visibility="Collapsed" VerticalAlignment="Top">
+                        <TextBlock Text="Giriş yap" Style="{StaticResource FormTitle}" />
+                        <TextBlock Text="Profil" Style="{StaticResource FieldLabel}" Margin="2,0,0,4" />
+                        <ComboBox x:Name="ProfileBox" DisplayMemberPath="Name" SelectionChanged="OnProfileSelected"
+                                  AutomationProperties.Name="Profil" />
+                        <TextBlock x:Name="NoProfilesText" Visibility="Collapsed" Margin="2,6,0,0" FontSize="12.5" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="Bu bilgisayarda kayıtlı profil yok. Bir profil dosyasını aktarın ya da yeni profil oluşturun." />
+                        <TextBlock Text="Şifre" Style="{StaticResource FieldLabel}" />
+                        <ui:PasswordBox x:Name="LoginPassword" PlaceholderText="Şifre" KeyDown="OnLoginKeyDown" AutomationProperties.Name="Şifre" />
+                        <TextBlock x:Name="LoginError" Style="{StaticResource ErrorLine}" />
+                        <Grid Margin="0,16,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ui:Button Content="Geri" Appearance="Transparent" Click="OnBackClicked" />
+                            <ui:Button Grid.Column="1" Content="Profili Aktar" Icon="{ui:SymbolIcon FolderOpen20}" Margin="8,0"
+                                       HorizontalAlignment="Right" Click="OnImportClicked" ToolTip="Kaydedilmiş bir .nprofile dosyasını aç" />
+                            <ui:Button x:Name="SignInButton" Grid.Column="2" Content="Giriş Yap" Appearance="Primary" Click="OnSignInClicked" />
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- 3. Yeni profil -->
+                    <StackPanel x:Name="NewPanel" Visibility="Collapsed" VerticalAlignment="Top">
+                        <TextBlock Text="Yeni profil" Style="{StaticResource FormTitle}" />
+                        <TextBlock Text="Kullanıcı adı" Style="{StaticResource FieldLabel}" Margin="2,0,0,4" />
+                        <ui:TextBox x:Name="NewName" PlaceholderText="Ağdaki diğer kullanıcılara görünür" MaxLength="32"
+                                    Icon="{ui:SymbolIcon Person24}" AutomationProperties.Name="Kullanıcı adı" />
+                        <TextBlock Text="Şifre (en az 4 karakter)" Style="{StaticResource FieldLabel}" />
+                        <ui:PasswordBox x:Name="NewPassword" PlaceholderText="Şifre" AutomationProperties.Name="Şifre" />
+                        <ui:PasswordBox x:Name="NewPasswordRepeat" PlaceholderText="Şifreyi tekrarla" Margin="0,8,0,0"
+                                        AutomationProperties.Name="Şifreyi tekrarla" KeyDown="OnNewKeyDown" />
+                        <TextBlock Text="Profili şuraya kaydet" Style="{StaticResource FieldLabel}" />
+                        <Border Padding="10,6,6,6" CornerRadius="6" BorderThickness="1"
+                                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                            <DockPanel>
+                                <ui:Button DockPanel.Dock="Right" Content="Klasör seç" Padding="10,4" Click="OnChooseFolderClicked" />
+                                <ui:Button x:Name="ResetFolderButton" DockPanel.Dock="Right" Appearance="Transparent" Padding="6,4" Margin="0,0,4,0"
+                                           Visibility="Collapsed" Click="OnResetFolderClicked" ToolTip="Varsayılan konuma dön"
+                                           AutomationProperties.Name="Varsayılan konum">
+                                    <ui:SymbolIcon Symbol="Dismiss20" FontSize="14" />
+                                </ui:Button>
+                                <ui:SymbolIcon x:Name="FolderIcon" Symbol="Desktop20" FontSize="16" VerticalAlignment="Center" />
+                                <TextBlock x:Name="FolderText" Margin="8,0,8,0" VerticalAlignment="Center" FontSize="12.5"
+                                           TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                            </DockPanel>
+                        </Border>
+                        <TextBlock x:Name="NewError" Style="{StaticResource ErrorLine}" />
+                        <Grid Margin="0,16,0,0">
+                            <ui:Button Content="Geri" Appearance="Transparent" HorizontalAlignment="Left" Click="OnBackClicked" />
+                            <ui:Button x:Name="CreateButton" Content="Profili oluştur" Appearance="Primary" HorizontalAlignment="Right"
+                                       Click="OnCreateClicked" />
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- 4. Bekleme -->
+                    <StackPanel x:Name="BusyPanel" Visibility="Collapsed" VerticalAlignment="Top" HorizontalAlignment="Center">
+                        <ui:ProgressRing IsIndeterminate="True" Width="40" Height="40" HorizontalAlignment="Center" />
+                        <TextBlock x:Name="BusyText" Margin="0,14,0,0" FontSize="14" HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+
+                    <!-- 5. Ağda aynı ad var: yeni ad seç -->
+                    <StackPanel x:Name="RenamePanel" Visibility="Collapsed" VerticalAlignment="Top">
+                        <TextBlock Text="Bu ad ağda kullanılıyor" Style="{StaticResource FormTitle}" />
+                        <TextBlock x:Name="RenameText" FontSize="13" TextWrapping="Wrap" Margin="2,0,0,10"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <ui:TextBox x:Name="RenameBox" MaxLength="32" Icon="{ui:SymbolIcon Person24}" KeyDown="OnRenameKeyDown"
+                                    AutomationProperties.Name="Yeni kullanıcı adı" />
+                        <TextBlock x:Name="RenameError" Style="{StaticResource ErrorLine}" />
+                        <Grid Margin="0,16,0,0">
+                            <ui:Button Content="Vazgeç" Appearance="Transparent" HorizontalAlignment="Left" Click="OnRenameCancelClicked" />
+                            <ui:Button Content="Devam" Appearance="Primary" HorizontalAlignment="Right" Click="OnRenameClicked" />
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
