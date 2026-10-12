@@ -13,9 +13,11 @@
     <Product>NetChat 26</Product>
     <AssemblyTitle>NetChat 26</AssemblyTitle>
     <Description>Yerel ağ mesajlaşma uygulaması</Description>
-    <Version>1.0.0</Version>
-    <FileVersion>1.0.0.0</FileVersion>
-    <InformationalVersion>1.0.0</InformationalVersion>
+    <Version>1.1.0</Version>
+    <FileVersion>1.1.0.0</FileVersion>
+    <InformationalVersion>1.1.0</InformationalVersion>
+    <!-- Ürün sürümüne git commit numarası eklenmesin (Ayrıntılar sekmesinde ve güncelleme denetiminde düz sürüm). -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Company>Gökdeniz G.</Company>
     <Authors>Gökdeniz G.</Authors>
     <ApplicationManifest>app.manifest</ApplicationManifest>

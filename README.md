@@ -12,6 +12,7 @@ Yerel ağdaki diğer cihazlarla sunucusuz, şifreli mesajlaşma. Windows 10 ve W
 - **Gruplar:** Yöneticiler, susturma, üye ekleme/çıkarma, "yalnızca yöneticiler yazabilir" gibi ayarlar. Grup bilgileri yönetici çevrimdışıyken de üyeler arasında güncel kalır.
 - **Çevrimdışı kişiler:** Çevrimdışı birine gönderilen mesajlar, o kişi ağa bağlandığında iletilir.
 - **Gizlilik:** Çevrimiçi durumu, son aktiflik, okundu bilgisi, sizi gruplara kimlerin ekleyebileceği ve mesaj geçmişinin saklanması ayarlanabilir. Engelleme ve sessize alma desteklenir.
+- **Otomatik güncelleme:** Uygulama açılışta yeni bir sürüm olup olmadığını denetler; varsa giriş ekranında sorar, indirip kendini günceller ve yeniden başlar.
 - **Arka planda çalışma:** Pencere kapatılınca uygulama bildirim alanında çalışmaya devam eder; yeni mesajlarda Windows bildirimi gösterilir.
 
 ## Kurulum

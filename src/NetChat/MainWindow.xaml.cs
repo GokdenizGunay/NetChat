@@ -56,19 +56,101 @@ public partial class MainWindow : FluentWindow
         _shell = null;
         _welcome = welcome;
 
-        void Swap()
+        async void Swap()
         {
             Host.Children.Clear();
             Host.Children.Add(welcome);
             Anim.FadeIn(welcome, fromY: 18, ms: 320);
             if (message != null)
-                _ = WindowDialogs.ShowAsync("Oturum kapatıldı", MakeMessage(message), "Tamam", secondaryText: null);
+                await WindowDialogs.ShowAsync("Oturum kapatıldı", MakeMessage(message), "Tamam", secondaryText: null);
+            // Yeni sürüm varsa giriş ekranına her dönüşte sorulur.
+            OfferUpdate();
         }
 
         if (previous != null && Host.Children.Contains(previous))
             Anim.FadeOut(previous, toY: -16, ms: 220, done: Swap);
         else
             Swap();
+    }
+
+    // ------------------------------------------------------------------ Güncelleme
+
+    /// <summary>Güncellemeden sonraki ilk açılışta: "Güncellendi" bilgisi.</summary>
+    public void ShowUpdatedNotice(Version? previous)
+    {
+        var current = UpdateService.CurrentVersion.ToString(3);
+        var text = previous != null
+            ? $"NetChat 26, v{previous.ToString(3)} sürümünden v{current} sürümüne güncellendi."
+            : $"NetChat 26, v{current} sürümüne güncellendi.";
+        _ = WindowDialogs.ShowAsync("Güncellendi", MakeMessage(text), "Tamam", secondaryText: null);
+    }
+
+    /// <summary>Giriş ekranındayken yeni sürüm varsa güncellemeyi önerir.</summary>
+    public async void OfferUpdate()
+    {
+        if (App.Updates.Available is not { } update || App.IsSignedIn || App.IsUpdating || WindowDialogs.IsOpen || _welcome == null) return;
+        var text = MakeMessage($"NetChat 26 v{update.Version.ToString(3)} yayımlandı. Kullandığınız sürüm: v{UpdateService.CurrentVersion.ToString(3)}.\n\n" +
+                               "Güncelleme indirilip kurulduktan sonra uygulama yeniden başlatılır.");
+        if (!await WindowDialogs.ShowAsync("Yeni sürüm var", text, "Güncelle", "Daha sonra")) return;
+        await RunUpdateAsync(update);
+    }
+
+    private async Task RunUpdateAsync(UpdateInfo update)
+    {
+        var bar = new System.Windows.Controls.ProgressBar { Height = 6, Minimum = 0, Maximum = 100, Margin = new Thickness(0, 4, 0, 10) };
+        var status = MakeMessage("İndirme başlıyor…");
+        var body = new System.Windows.Controls.StackPanel { Children = { bar, status } };
+        App.IsUpdating = true;
+        _ = WindowDialogs.ShowAsync($"v{update.Version.ToString(3)} indiriliyor", body, null, null, dismissable: false);
+        try
+        {
+            var progress = new Progress<(long Received, long Total)>(p =>
+            {
+                var percent = p.Total > 0 ? p.Received * 100.0 / p.Total : 0;
+                bar.Value = percent;
+                ((System.Windows.Controls.TextBlock)status).Text =
+                    $"%{percent:0} · {p.Received / 1048576.0:0.0} / {p.Total / 1048576.0:0.0} MB";
+            });
+            var downloaded = await App.Updates.DownloadAsync(update, progress);
+            ((System.Windows.Controls.TextBlock)status).Text = "Kuruluyor…";
+            UpdateService.InstallAndStart(downloaded);
+            App.IsUpdating = false;
+            ((App)Application.Current).ExitApplication();
+        }
+        catch (Exception ex)
+        {
+            Core.Log.Error("Güncelleme başarısız", ex);
+            App.IsUpdating = false;
+            WindowDialogs.Dismiss();
+            // Tekrar denemek klasöre yazma izni yoksa işe yaramaz.
+            var noAccess = ex is UnauthorizedAccessException;
+            var reason = noAccess
+                ? "Uygulamanın bulunduğu klasöre yazma izni yok. Yeni sürümü elle indirip mevcut exe'nin yerine koyabilirsiniz."
+                : ex is TimeoutException or System.Net.Http.HttpRequestException or System.IO.IOException
+                    ? "İndirme sırasında internet bağlantısı kesildi. Mevcut sürüm değişmedi."
+                    : "İndirilen dosya doğrulanamadı. Mevcut sürüm değişmedi.";
+            if (await WindowDialogs.ShowAsync("Güncelleme başarısız", FailureBody(reason, update),
+                    noAccess ? null : "Tekrar dene", noAccess ? "Kapat" : "Daha sonra"))
+                await RunUpdateAsync(update);
+        }
+    }
+
+    /// <summary>Hata mesajı ve altında "Manuel indir": son sürümün yayın sayfasını tarayıcıda açar.</summary>
+    private UIElement FailureBody(string reason, UpdateInfo update)
+    {
+        var manual = new Wpf.Ui.Controls.Button
+        {
+            Content = "Manuel indir",
+            Icon = new Wpf.Ui.Controls.SymbolIcon(Wpf.Ui.Controls.SymbolRegular.ArrowDownload20),
+            Margin = new Thickness(0, 14, 0, 0),
+            Padding = new Thickness(12, 6, 14, 6),
+        };
+        manual.Click += (_, _) =>
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(update.PageUrl) { UseShellExecute = true });
+            WindowDialogs.Dismiss();
+        };
+        return new System.Windows.Controls.StackPanel { Children = { MakeMessage(reason), manual } };
     }
 
     /// <summary>Giriş ekranında kullanılacak uyarı/onay diyalogları.</summary>
@@ -131,6 +213,12 @@ public partial class MainWindow : FluentWindow
     {
         // Oturum açıkken kapatma düğmesi uygulamayı sonlandırmaz; bildirim alanında çalışmaya devam eder.
         // Giriş ekranındayken arka planda yapılacak bir şey olmadığından uygulama kapanır.
+        // Güncelleme indirilirken kapatılamaz.
+        if (App.IsUpdating)
+        {
+            e.Cancel = true;
+            return;
+        }
         if (!App.IsExiting && App.IsSignedIn && App.Settings.RunInBackground)
         {
             e.Cancel = true;

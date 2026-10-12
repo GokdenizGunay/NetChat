@@ -16,6 +16,9 @@ public partial class App : Application
     public static NotificationService Notifications { get; private set; } = null!;
     public static NetChat.Net.NetworkStatusService Network { get; private set; } = null!;
     public static bool IsExiting { get; private set; }
+    public static UpdateService Updates { get; } = new();
+    /// <summary>Güncelleme indirilirken uygulama kapatılamaz ve kullanılamaz.</summary>
+    public static bool IsUpdating { get; set; }
 
     private Mutex? _mutex;
     private TrayService? _tray;
@@ -28,14 +31,28 @@ public partial class App : Application
         string? profile = null;
         string? openPath = null;
         var minimized = false;
+        (int Pid, string Exe)? updatedFrom = null;
         for (int i = 0; i < e.Args.Length; i++)
         {
             if (e.Args[i] == "--profile" && i + 1 < e.Args.Length) profile = e.Args[++i];
+            else if (e.Args[i] == "--updated-from" && i + 2 < e.Args.Length && int.TryParse(e.Args[i + 1], out var oldPid))
+            {
+                updatedFrom = (oldPid, e.Args[i + 2]);
+                i += 2;
+            }
             else if (e.Args[i] == "--minimized") minimized = true;
             else if (e.Args[i] == "--log") AppPaths.LoggingEnabled = true;
             else if (e.Args[i].EndsWith(ProfileFile.Extension, StringComparison.OrdinalIgnoreCase)) openPath = Path.GetFullPath(e.Args[i]);
         }
         AppPaths.Initialize(profile);
+        // Güncellemeden sonra: eski sürüm kapanıp tek örnek kilidini bırakana kadar bekle, eski exe'yi sil.
+        Version? updatedFromVersion = null;
+        var justUpdated = false;
+        if (updatedFrom is { } old)
+        {
+            updatedFromVersion = UpdateService.FinishUpdate(old.Pid, old.Exe);
+            justUpdated = true;
+        }
 
         // Tek örnek: ikinci kez açılırsa (ör. bir .nprofile dosyasına çift tıklandı) isteği mevcut örneğe ilet.
         _mutex = new Mutex(true, $@"Local\{AppPaths.AppId}-{AppPaths.Profile}", out var isFirst);
@@ -100,6 +117,9 @@ public partial class App : Application
         _window.Show();
         _window.ShowLogin(null);
         if (openPath != null) _window.OpenProfileFile(openPath);
+        // Yalnızca güncellemeden sonraki ilk açılış "--updated-from" ile başlatılır.
+        if (justUpdated) _window.ShowUpdatedNotice(updatedFromVersion);
+        _ = CheckForUpdatesAsync();
         // Windows ile başlatıldıysa: giriş için şifre gerektiğinden görev çubuğunda simge durumunda bekle.
         if (minimized) _window.WindowState = WindowState.Minimized;
     }
@@ -273,6 +293,13 @@ public partial class App : Application
                 break;
         }
     }
+    private async Task CheckForUpdatesAsync()
+    {
+        await Updates.CheckAsync();
+        // Giriş ekranındaysak hemen sor; değilse giriş ekranına dönüldüğünde sorulur.
+        if (Updates.Available != null && !IsSignedIn) _window?.OfferUpdate();
+    }
+
     /// <summary>Başka bir örnekten gelen istek: pencereyi göster; bir profil dosyası verildiyse giriş ekranında seç.</summary>
     private void OnExternalOpen(string? path)
     {
@@ -307,7 +334,7 @@ public partial class App : Application
 
     public void ExitApplication()
     {
-        if (IsExiting) return;
+        if (IsExiting || IsUpdating) return;
         IsExiting = true;
         try
         {

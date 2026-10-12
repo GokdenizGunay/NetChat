@@ -20,17 +20,21 @@ public sealed class DialogHost : Grid
     private readonly Border _scrim;
     private TaskCompletionSource<bool>? _pending;
     private Border? _card;
+    private bool _dismissable = true;
 
     public DialogHost()
     {
         Visibility = Visibility.Collapsed;
         _scrim = new Border { Background = new SolidColorBrush(Color.FromArgb(0x80, 0, 0, 0)) };
-        _scrim.MouseLeftButtonDown += (_, _) => Close(false);
+        _scrim.MouseLeftButtonDown += (_, _) =>
+        {
+            if (_dismissable) Close(false);
+        };
         Children.Add(_scrim);
         Current = this;
         PreviewKeyDown += (_, e) =>
         {
-            if (e.Key == Key.Escape && _pending != null)
+            if (e.Key == Key.Escape && _pending != null && _dismissable)
             {
                 Close(false);
                 e.Handled = true;
@@ -40,12 +44,17 @@ public sealed class DialogHost : Grid
 
     public bool IsOpen => _pending != null;
 
-    /// <summary>Diyaloğu gösterir; birincil düğmeye basılırsa true döner.</summary>
-    public Task<bool> ShowAsync(string title, UIElement? body, string primaryText, string? secondaryText = "İptal",
-        bool danger = false, Func<bool>? canSubmit = null, Action<Action>? bindRefresh = null, double width = 440)
+    /// <summary>
+    /// Diyaloğu gösterir; birincil düğmeye basılırsa true döner. <paramref name="primaryText"/> null ise düğme yoktur;
+    /// <paramref name="dismissable"/> false ise dışına tıklama/Esc ile kapanmaz (yalnızca <see cref="Dismiss"/> ile).
+    /// </summary>
+    public Task<bool> ShowAsync(string title, UIElement? body, string? primaryText, string? secondaryText = "İptal",
+        bool danger = false, Func<bool>? canSubmit = null, Action<Action>? bindRefresh = null, double width = 440,
+        bool dismissable = true)
     {
         if (_pending != null) Close(false);
         _pending = new TaskCompletionSource<bool>();
+        _dismissable = dismissable;
 
         var titleBlock = new TextBlock
         {
@@ -59,12 +68,12 @@ public sealed class DialogHost : Grid
 
         var primary = new Button
         {
-            Content = primaryText,
+            Content = primaryText ?? "",
             Appearance = danger ? ControlAppearance.Danger : ControlAppearance.Primary,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             MinWidth = 120,
             Margin = new Thickness(0, 0, secondaryText == null ? 0 : 8, 0),
-            IsDefault = body is not System.Windows.Controls.TextBox { AcceptsReturn: true },
+            IsDefault = primaryText != null && body is not System.Windows.Controls.TextBox { AcceptsReturn: true },
         };
         primary.Click += (_, _) =>
         {
@@ -77,7 +86,7 @@ public sealed class DialogHost : Grid
             bindRefresh?.Invoke(Refresh);
         }
 
-        var buttons = new System.Windows.Controls.Primitives.UniformGrid { Columns = secondaryText == null ? 1 : 2 };
+        var buttons = new System.Windows.Controls.Primitives.UniformGrid { Columns = primaryText != null && secondaryText != null ? 2 : 1 };
         buttons.Children.Add(primary);
         if (secondaryText != null)
         {
@@ -88,6 +97,8 @@ public sealed class DialogHost : Grid
 
         var footer = new Border { Padding = new Thickness(24, 18, 24, 18), Child = buttons, CornerRadius = new CornerRadius(0, 0, 8, 8) };
         footer.SetResourceReference(Border.BackgroundProperty, "SolidBackgroundFillColorBaseBrush");
+        if (primaryText == null && secondaryText == null) footer.Visibility = Visibility.Collapsed;
+        else if (primaryText == null) primary.Visibility = Visibility.Collapsed;
 
         var content = new StackPanel { Margin = new Thickness(24, 22, 24, 22) };
         content.Children.Add(titleBlock);
@@ -132,6 +143,9 @@ public sealed class DialogHost : Grid
 
         return _pending.Task;
     }
+
+    /// <summary>Açık diyaloğu kodla kapatır (ör. kapatılamayan bir işlem bittiğinde).</summary>
+    public void Dismiss() => Close(false);
 
     public Task<bool> ConfirmAsync(string title, string message, string primaryText, bool danger = false)
     {
