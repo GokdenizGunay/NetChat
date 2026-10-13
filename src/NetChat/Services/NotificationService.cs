@@ -147,6 +147,68 @@ public sealed class NotificationService
     /// Oturum kapanırken: bildirim merkezindeki mesajları ve bildirim görsellerini siler;
     /// böylece cihazda profile ait hiçbir şey kalmaz.
     /// </summary>
+    /// <summary>
+    /// Windows ayarlarındaki ana "Bildirimler" anahtarı kapalı mı? Kapalıysa uygulamanın bildirimleri hiç görünmez.
+    /// </summary>
+    public static bool SystemNotificationsDisabled
+    {
+        get
+        {
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(PushNotificationsKey);
+                // Değer yoksa açık sayılır; kapatılınca Windows 0 yazar.
+                return key?.GetValue("ToastEnabled") is int enabled && enabled == 0;
+            }
+            catch (Exception ex) when (ex is System.Security.SecurityException or IOException or UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+    }
+
+    private const string PushNotificationsKey = @"Software\Microsoft\Windows\CurrentVersion\PushNotifications";
+
+    /// <summary>Windows'un ana bildirim anahtarı açıldı ya da kapatıldı (arka plan iş parçacığında gelir).</summary>
+    public static event Action? SystemSettingChanged;
+
+    private static int _watching;
+
+    /// <summary>
+    /// Ana bildirim anahtarını izlemeye başlar. Yoklama yapılmaz: iş parçacığı Windows kayıt defteri değişene kadar
+    /// bekler (işlemci kullanmaz).
+    /// </summary>
+    public static void WatchSystemSetting()
+    {
+        if (Interlocked.Exchange(ref _watching, 1) == 1) return;
+        new Thread(() =>
+        {
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(PushNotificationsKey);
+                if (key == null) return;
+                var last = SystemNotificationsDisabled;
+                while (true)
+                {
+                    // REG_NOTIFY_CHANGE_LAST_SET (4): değer değişene kadar bekler.
+                    if (RegNotifyChangeKeyValue(key.Handle, false, 4, IntPtr.Zero, false) != 0) return;
+                    var now = SystemNotificationsDisabled;
+                    if (now == last) continue;
+                    last = now;
+                    SystemSettingChanged?.Invoke();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Bildirim ayarı izlenemiyor", ex);
+            }
+        }) { IsBackground = true, Name = "NotificationSettingWatch" }.Start();
+    }
+
+    [System.Runtime.InteropServices.DllImport("advapi32.dll")]
+    private static extern int RegNotifyChangeKeyValue(Microsoft.Win32.SafeHandles.SafeRegistryHandle hKey, bool watchSubtree,
+        int notifyFilter, IntPtr hEvent, bool asynchronous);
+
     public static void ClearAll()
     {
         try

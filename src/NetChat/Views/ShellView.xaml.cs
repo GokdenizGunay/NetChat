@@ -37,12 +37,19 @@ public partial class ShellView : UserControl
         _conversations.LiveFilteringProperties.Add(nameof(Conversation.Title));
         ConversationList.ItemsSource = _conversations;
 
-        _people = new ListCollectionView(_chat.Peers);
-        _people.SortDescriptions.Add(new SortDescription(nameof(Peer.IsOnline), ListSortDirection.Descending));
+        // Yalnızca bu oturumda ağda görülen kişiler; Çevrimiçi / Boşta / Çevrimdışı bölümlerinde.
+        _people = new ListCollectionView(_chat.Peers) { Filter = PeopleFilter };
+        _people.GroupDescriptions.Add(new PropertyGroupDescription(nameof(Peer.PresenceGroup)));
+        _people.SortDescriptions.Add(new SortDescription(nameof(Peer.PresenceGroupOrder), ListSortDirection.Ascending));
         _people.SortDescriptions.Add(new SortDescription(nameof(Peer.Name), ListSortDirection.Ascending));
         _people.IsLiveSorting = true;
-        _people.LiveSortingProperties.Add(nameof(Peer.IsOnline));
+        _people.LiveSortingProperties.Add(nameof(Peer.PresenceGroupOrder));
         _people.LiveSortingProperties.Add(nameof(Peer.Name));
+        _people.IsLiveGrouping = true;
+        _people.LiveGroupingProperties.Add(nameof(Peer.PresenceGroup));
+        _people.IsLiveFiltering = true;
+        _people.LiveFilteringProperties.Add(nameof(Peer.SeenThisSession));
+        _people.LiveFilteringProperties.Add(nameof(Peer.Name));
         PeopleList.ItemsSource = _people;
 
         _chat.Conversations.CollectionChanged += (_, _) => UpdateEmptyStates();
@@ -55,6 +62,7 @@ public partial class ShellView : UserControl
         _chat.Info += ShowInfo;
         App.Settings.PropertyChanged += OnSettingsChanged;
         UpdateBell();
+        NotificationService.SystemSettingChanged += OnSystemNotificationSettingChanged;
         App.Network.Changed += OnNetworkChanged;
 
         ConversationList.PreviewMouseRightButtonDown += OnConversationRightClick;
@@ -70,6 +78,8 @@ public partial class ShellView : UserControl
         UpdateEmptyStates();
         UpdateRailBadge();
         UpdateListTitle();
+        App.Updates.AvailableChanged += OnUpdateAvailableChanged;
+        UpdateSettingsBadge();
     }
 
     // ------------------------------------------------------------------ Genel
@@ -91,6 +101,8 @@ public partial class ShellView : UserControl
         App.Settings.PropertyChanged -= OnSettingsChanged;
         App.Network.Changed -= OnNetworkChanged;
         Settings.Detach();
+        NotificationService.SystemSettingChanged -= OnSystemNotificationSettingChanged;
+        App.Updates.AvailableChanged -= OnUpdateAvailableChanged;
         Dialogs.Visibility = Visibility.Collapsed;
     }
 
@@ -109,6 +121,17 @@ public partial class ShellView : UserControl
         NetText.Text = status.IsConnected ? $"Çevrimiçi · {status.Address}" : "Çevrimdışı";
     }
 
+    private void OnUpdateAvailableChanged() => Dispatcher.BeginInvoke(UpdateSettingsBadge);
+
+    /// <summary>Yeni sürüm olduğu sürece Ayarlar simgesinde nokta durur.</summary>
+    private void UpdateSettingsBadge()
+    {
+        var show = App.Updates.Available != null;
+        if (show && SettingsBadge.Visibility != Visibility.Visible) Anim.PopIn(SettingsBadge);
+        else if (!show) SettingsBadge.Visibility = Visibility.Collapsed;
+        SettingsTab.ToolTip = show ? "Ayarlar · Yeni sürüm var" : "Ayarlar";
+    }
+
     private void UpdateRailBadge()
     {
         var show = _chat.TotalUnread > 0;
@@ -121,7 +144,7 @@ public partial class ShellView : UserControl
         var chats = ChatsTab.IsChecked == true || SettingsTab.IsChecked == true && ConversationList.Visibility == Visibility.Visible;
         EmptyChats.Visibility = chats && _chat.Conversations.Count == 0 && string.IsNullOrEmpty(SearchBox.Text)
             ? Visibility.Visible : Visibility.Collapsed;
-        EmptyPeople.Visibility = PeopleList.Visibility == Visibility.Visible && _chat.Peers.Count(p => p.IsOnline) == 0 && _chat.Peers.Count == 0
+        EmptyPeople.Visibility = PeopleList.Visibility == Visibility.Visible && !_chat.Peers.Any(p => p.SeenThisSession)
             ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -162,6 +185,7 @@ public partial class ShellView : UserControl
     private void OnPeerPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(Peer.IsOnline)) UpdateListTitle();
+        if (e.PropertyName == nameof(Peer.SeenThisSession)) UpdateEmptyStates();
     }
 
     private void ShowInfo(string text)
@@ -275,15 +299,20 @@ public partial class ShellView : UserControl
 
     // ------------------------------------------------------------------ Arama
 
+    private string _peopleQuery = "";
+
+    private bool PeopleFilter(object o) =>
+        o is Peer p && p.SeenThisSession &&
+        (_peopleQuery.Length == 0 || p.Name.Contains(_peopleQuery, StringComparison.CurrentCultureIgnoreCase));
+
     private void OnSearchChanged(object sender, TextChangedEventArgs e)
     {
         var q = SearchBox.Text.Trim();
         _conversations.Filter = q.Length == 0
             ? null
             : o => o is Conversation c && c.Title.Contains(q, StringComparison.CurrentCultureIgnoreCase);
-        _people.Filter = q.Length == 0
-            ? null
-            : o => o is Peer p && p.Name.Contains(q, StringComparison.CurrentCultureIgnoreCase);
+        _peopleQuery = q;
+        _people.Refresh();
         UpdateEmptyStates();
     }
 
@@ -388,20 +417,36 @@ public partial class ShellView : UserControl
 
     // ------------------------------------------------------------------ Bildirim zili
 
-    private void OnBellClicked(object sender, RoutedEventArgs e)
+    private async void OnBellClicked(object sender, RoutedEventArgs e)
     {
+        // Windows bildirimleri kapalıyken uygulama içi sessize alma anlamsız: önce Windows ayarı açılmalı.
+        if (NotificationService.SystemNotificationsDisabled)
+        {
+            if (Window.GetWindow(this) is MainWindow window) await window.ShowNotificationsOffAsync();
+            return;
+        }
         App.Settings.NotificationsMuted = !App.Settings.NotificationsMuted;
         Anim.PopIn(BellIcon, 180);
     }
 
+    private void OnSystemNotificationSettingChanged() => Dispatcher.BeginInvoke(() =>
+    {
+        UpdateBell();
+        Anim.PopIn(BellIcon, 180);
+    });
+
     private void UpdateBell()
     {
+        var systemOff = NotificationService.SystemNotificationsDisabled;
         var muted = App.Settings.NotificationsMuted;
-        BellIcon.Symbol = muted ? SymbolRegular.AlertOff24 : SymbolRegular.Alert24;
-        BellButton.ToolTip = muted ? "Bildirimler sessizde — açmak için tıklayın" : "Tüm bildirimleri sessize al";
-        System.Windows.Automation.AutomationProperties.SetName(BellButton, muted ? "Bildirimleri aç" : "Bildirimleri sessize al");
-        BellButton.Foreground = muted
-            ? (Brush)FindResource("SystemFillColorCautionBrush")
+        BellIcon.Symbol = systemOff || muted ? SymbolRegular.AlertOff24 : SymbolRegular.Alert24;
+        var tip = systemOff ? "Windows bildirimleri kapalı — açmak için tıklayın"
+            : muted ? "Bildirimler sessizde — açmak için tıklayın"
+            : "Tüm bildirimleri sessize al";
+        BellButton.ToolTip = tip;
+        System.Windows.Automation.AutomationProperties.SetName(BellButton, systemOff ? "Windows bildirimleri kapalı" : muted ? "Bildirimleri aç" : "Bildirimleri sessize al");
+        BellButton.Foreground = systemOff ? (Brush)FindResource("SystemFillColorCriticalBrush")
+            : muted ? (Brush)FindResource("SystemFillColorCautionBrush")
             : (Brush)FindResource("TextFillColorSecondaryBrush");
     }
 

@@ -110,6 +110,14 @@ public partial class ChatView : UserControl
         {
             if (IsVisible) Dispatcher.BeginInvoke(() => Input.Focus(), DispatcherPriority.Input);
         };
+        // "Yazıyor" noktaları yalnızca ekrandayken döner (başka sekme, tepsiye gizlenmiş pencere vb. iken durur).
+        TypingBubble.IsVisibleChanged += (_, _) =>
+        {
+            if (TypingBubble.IsVisible && IsLoaded) StartTypingDots();
+            else StopTypingDots();
+        };
+        // Kilitlenince sohbet görünümü pencereden çıkarılır; IsVisible her zaman güncellenmediği için ayrıca durdurulur.
+        Unloaded += (_, _) => StopTypingDots();
         _chat.BlockChanged += peer =>
         {
             if (_vm?.Conversation.Peer != peer) return;
@@ -245,7 +253,6 @@ public partial class ChatView : UserControl
             if (TypingBubble.Visibility != Visibility.Visible)
             {
                 var stick = IsNearBottom;
-                StartTypingDots();
                 if (animate) Anim.FadeIn(TypingBubble, fromY: 8, fromX: -8, ms: 200);
                 else TypingBubble.Visibility = Visibility.Visible;
                 if (stick) ScrollToEnd();
@@ -253,63 +260,62 @@ public partial class ChatView : UserControl
         }
         else if (TypingBubble.Visibility == Visibility.Visible)
         {
-            if (animate) Anim.FadeOut(TypingBubble, toY: 6, ms: 150, done: StopTypingDots);
-            else
-            {
-                TypingBubble.Visibility = Visibility.Collapsed;
-                StopTypingDots();
-            }
+            if (animate) Anim.FadeOut(TypingBubble, toY: 6, ms: 150);
+            else TypingBubble.Visibility = Visibility.Collapsed;
         }
     }
 
+    /// <summary>"Yazıyor" noktalarının sonsuz animasyon saatleri; durdururken açıkça kaldırılır.</summary>
+    private readonly List<(UIElement Target, System.Windows.Media.Animation.AnimationClock Clock)> _dotClocks = [];
+
+    private const double DotDim = 0.25;
+    private const double DotLit = 1;
+
+    /// <summary>
+    /// "." → ".." → "..." döngüsü: noktalar yerinde durur, yalnızca sırayla belirginleşir. Değerler kademeli
+    /// (geçişsiz) değiştiği için ekran yalnızca adım anlarında yeniden çizilir.
+    /// </summary>
     private void StartTypingDots()
     {
+        if (_dotClocks.Count > 0) return;
         Ellipse[] dots = [Dot1, Dot2, Dot3];
+        var step = TimeSpan.FromMilliseconds(400);
         for (int i = 0; i < dots.Length; i++)
         {
-            var transform = (System.Windows.Media.TranslateTransform)dots[i].RenderTransform;
+            ((System.Windows.Media.TranslateTransform)dots[i].RenderTransform).Y = 0;
             if (!Anim.Enabled)
             {
-                transform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
-                dots[i].BeginAnimation(OpacityProperty, null);
-                dots[i].Opacity = 0.8;
+                dots[i].Opacity = DotLit;
                 continue;
             }
-            // Her nokta sırayla zıplar ve parlar; döngü 1.2 sn.
-            var begin = TimeSpan.FromMilliseconds(i * 160);
-            var bounce = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames
+            var anim = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames
             {
-                BeginTime = begin,
-                Duration = TimeSpan.FromMilliseconds(1200),
+                Duration = step * dots.Length,
                 RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
             };
-            var ease = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut };
-            bounce.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(0, TimeSpan.Zero));
-            bounce.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(-4, TimeSpan.FromMilliseconds(250), ease));
-            bounce.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(0, TimeSpan.FromMilliseconds(500), ease));
-            transform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, bounce);
-
-            var glow = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames
-            {
-                BeginTime = begin,
-                Duration = TimeSpan.FromMilliseconds(1200),
-                RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
-            };
-            glow.KeyFrames.Add(new System.Windows.Media.Animation.LinearDoubleKeyFrame(0.45, TimeSpan.Zero));
-            glow.KeyFrames.Add(new System.Windows.Media.Animation.LinearDoubleKeyFrame(1, TimeSpan.FromMilliseconds(250)));
-            glow.KeyFrames.Add(new System.Windows.Media.Animation.LinearDoubleKeyFrame(0.45, TimeSpan.FromMilliseconds(500)));
-            dots[i].Opacity = 0.45;
-            dots[i].BeginAnimation(OpacityProperty, glow);
+            // Adımlar 400 ms aralıklı; saniyede 10 kare fazlasıyla yeterli.
+            System.Windows.Media.Animation.Timeline.SetDesiredFrameRate(anim, 10);
+            // i. nokta i. adımda yanar ve döngü sonuna kadar yanık kalır.
+            anim.KeyFrames.Add(new System.Windows.Media.Animation.DiscreteDoubleKeyFrame(i == 0 ? DotLit : DotDim, TimeSpan.Zero));
+            if (i > 0) anim.KeyFrames.Add(new System.Windows.Media.Animation.DiscreteDoubleKeyFrame(DotLit, step * i));
+            var clock = anim.CreateClock();
+            dots[i].ApplyAnimationClock(OpacityProperty, clock);
+            _dotClocks.Add((dots[i], clock));
         }
     }
 
+    /// <summary>
+    /// Saatleri durdurup kaldırır. Yalnızca BeginAnimation(..., null) yetmez: sonsuz saat çöp toplanana kadar
+    /// işlemeye ve her karede ekranı yeniden çizdirmeye (klavye girişini geciktirmeye) devam eder.
+    /// </summary>
     private void StopTypingDots()
     {
-        foreach (var dot in new[] { Dot1, Dot2, Dot3 })
+        foreach (var (target, clock) in _dotClocks)
         {
-            ((System.Windows.Media.TranslateTransform)dot.RenderTransform).BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
-            dot.BeginAnimation(OpacityProperty, null);
+            clock.Controller?.Remove();
+            target.ApplyAnimationClock(OpacityProperty, null);
         }
+        _dotClocks.Clear();
     }
 
     private void OnConversationPropertyChanged(object? sender, PropertyChangedEventArgs e)

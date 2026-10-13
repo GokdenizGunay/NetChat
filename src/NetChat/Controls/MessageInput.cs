@@ -4,20 +4,19 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
-using EmojiRichTextBox = Emoji.Wpf.RichTextBox;
 using TextBlock = System.Windows.Controls.TextBlock;
 
 namespace NetChat.Controls;
 
 /// <summary>
-/// Çok satırlı mesaj giriş alanı. WPF'nin TextBox'ı renkli emoji çizemediği için Emoji.Wpf'nin
-/// RichTextBox'ı üzerine kurulu; dışarıya düz metin + imleç konumu sunar. Fluent metin kutusu görünümündedir.
+/// Çok satırlı mesaj giriş alanı. WPF'nin TextBox'ı renkli emoji çizemediği için emojileri Emoji.Wpf görselleriyle
+/// gösteren bir RichTextBox üzerine kurulu; dışarıya düz metin + imleç konumu sunar. Fluent metin kutusu görünümündedir.
 /// </summary>
 public sealed class MessageInput : Grid
 {
     private readonly Border _frame;
     private readonly Border _focusLine;
-    private readonly EmojiRichTextBox _box;
+    private readonly EmojiBox _box;
     private readonly TextBlock _placeholder;
 
     public event TextChangedEventHandler? TextChanged;
@@ -25,7 +24,7 @@ public sealed class MessageInput : Grid
 
     public MessageInput()
     {
-        _box = new EmojiRichTextBox
+        _box = new EmojiBox
         {
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
@@ -125,7 +124,9 @@ public sealed class MessageInput : Grid
         get => NormalizeNewlines(ExtractText(_box.Document.ContentStart, _box.Document.ContentEnd));
         set
         {
-            _box.Text = value ?? "";
+            _box.Document.Blocks.Clear();
+            _box.Document.Blocks.Add(new Paragraph(new Run(value ?? "")));
+            _box.CaretPosition = _box.Document.ContentEnd;
             _placeholder.Visibility = string.IsNullOrEmpty(value) ? Visibility.Visible : Visibility.Collapsed;
         }
     }
@@ -193,10 +194,9 @@ public sealed class MessageInput : Grid
     /// <summary>Seçimi metinle değiştirir (emojiler renkli görsele dönüşür).</summary>
     public void InsertAtCaret(string text)
     {
-        System.Windows.Controls.RichTextBox box = _box;
-        box.Selection.Text = text;
-        box.CaretPosition = box.Selection.End;
-        box.Selection.Select(box.CaretPosition, box.CaretPosition);
+        _box.Selection.Text = text;
+        _box.CaretPosition = _box.Selection.End;
+        _box.Selection.Select(_box.CaretPosition, _box.CaretPosition);
     }
 
     /// <summary>İmleçten önceki <paramref name="count"/> karakteri (düz harfler) <paramref name="text"/> ile değiştirir.</summary>
@@ -210,12 +210,128 @@ public sealed class MessageInput : Grid
             if (prev == null) break;
             start = prev;
         }
-        System.Windows.Controls.RichTextBox box = _box;
-        box.Selection.Select(start, end);
+        _box.Selection.Select(start, end);
         InsertAtCaret(text);
     }
 
     public new bool Focus() => _box.Focus();
 
     public new bool IsKeyboardFocusWithin => _box.IsKeyboardFocusWithin;
+
+    /// <summary>
+    /// Emojileri renkli görsele (EmojiInline) çeviren RichTextBox. Emoji.Wpf.RichTextBox her tuş vuruşunda
+    /// tüm belgeyi harf harf yeniden taradığı için uzun mesajlarda yazma gecikiyordu; bu sürüm yalnızca
+    /// değişen bölgeyi tarar.
+    /// </summary>
+    private sealed class EmojiBox : RichTextBox
+    {
+        private bool _substituting;
+        private TextPointer? _clickTarget;
+
+        public EmojiBox()
+        {
+            SetValue(Block.LineHeightProperty, 1.0);
+            CommandManager.AddPreviewExecutedHandler(this, OnPreviewExecuted);
+        }
+
+        protected override void OnTextChanged(TextChangedEventArgs e)
+        {
+            // Emojilerin yerleştirilmesi de bir değişikliktir; o iç değişiklik dışarıya ayrıca bildirilmez.
+            if (_substituting) return;
+            _substituting = true;
+            try
+            {
+                BeginChange();
+                // Sondan başa: öndeki değişiklikler arkadakilerin konumunu kaydırmasın.
+                foreach (var change in e.Changes.Where(c => c.AddedLength > 0).OrderByDescending(c => c.Offset))
+                {
+                    // Birleşik emojiler (ten rengi, ZWJ) önceki karakterle birleşebilir; biraz geriden başla.
+                    var start = Document.ContentStart.GetPositionAtOffset(Math.Max(0, change.Offset - 8)) ?? Document.ContentStart;
+                    var end = Document.ContentStart.GetPositionAtOffset(change.Offset + change.AddedLength) ?? Document.ContentEnd;
+                    SubstituteGlyphs(start, end);
+                }
+                EndChange();
+            }
+            finally
+            {
+                _substituting = false;
+            }
+            base.OnTextChanged(e);
+        }
+
+        private void SubstituteGlyphs(TextPointer start, TextPointer end)
+        {
+            var caret = CaretPosition;
+            var nav = start;
+            while (nav != null && nav.CompareTo(end) < 0)
+            {
+                if (nav.GetPointerContext(LogicalDirection.Forward) != TextPointerContext.Text)
+                {
+                    nav = nav.GetNextContextPosition(LogicalDirection.Forward);
+                    continue;
+                }
+                var text = nav.GetTextInRun(LogicalDirection.Forward);
+                var limit = Math.Min(text.Length, Math.Max(0, nav.GetOffsetToPosition(end)));
+                var first = -1;
+                for (int i = 0; i < limit && first < 0; i++)
+                    if (Emoji.Wpf.EmojiData.MatchStart.Contains(text[i])) first = i;
+                if (first < 0)
+                {
+                    nav = nav.GetPositionAtOffset(text.Length);
+                    continue;
+                }
+                // Eşleşme değişen bölgeyi biraz aşabilir (ör. ZWJ dizisinin devamı); koşu sonuna kadar bakılır.
+                var match = Emoji.Wpf.EmojiData.MatchOne.Match(text, first);
+                if (!match.Success || match.Index >= limit)
+                {
+                    nav = nav.GetPositionAtOffset(first + 1);
+                    continue;
+                }
+                var from = nav.GetPositionAtOffset(match.Index)!;
+                var to = from.GetPositionAtOffset(match.Length)!;
+                var caretInside = from.CompareTo(caret) < 0 && to.CompareTo(caret) >= 0;
+                new TextRange(from, to).Text = "";
+                var emoji = new Emoji.Wpf.EmojiInline(from) { FontSize = FontSize, Foreground = Brushes.Black, Text = match.Value };
+                if (caretInside) caret = emoji.ElementEnd;
+                nav = emoji.ElementEnd;
+            }
+            CaretPosition = caret;
+        }
+
+        /// <summary>Kopyala/kes: emoji görselleri asıl karakterleriyle düz metin olarak panoya gider.</summary>
+        private void OnPreviewExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            if (e.Command != ApplicationCommands.Copy && e.Command != ApplicationCommands.Cut) return;
+            var text = ExtractText(Selection.Start, Selection.End);
+            if (e.Command == ApplicationCommands.Cut) Selection.Text = "";
+            try
+            {
+                Clipboard.SetText(text);
+            }
+            catch (System.Runtime.InteropServices.ExternalException)
+            {
+                // Pano başka bir uygulamada kilitli.
+            }
+            e.Handled = true;
+        }
+
+        protected override void OnMouseDown(MouseButtonEventArgs e)
+        {
+            // Emoji görseline tıklanınca imleç görselin en yakın kenarına konur.
+            _clickTarget = null;
+            if (e.ClickCount == 1 && VisualTreeHelper.HitTest(this, e.GetPosition(this))?.VisualHit is Image { Parent: Emoji.Wpf.EmojiInline emoji } image)
+                _clickTarget = e.GetPosition(image).X < image.ActualWidth / 2 ? emoji.ElementStart : emoji.ElementEnd;
+            base.OnMouseDown(e);
+        }
+
+        protected override void OnSelectionChanged(RoutedEventArgs e)
+        {
+            if (_clickTarget is { } target)
+            {
+                _clickTarget = null;
+                Selection.Select(target, target);
+            }
+            base.OnSelectionChanged(e);
+        }
+    }
 }

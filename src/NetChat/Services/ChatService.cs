@@ -268,7 +268,7 @@ public sealed partial class ChatService : ObservableObject, IDisposable
         {
             _persist(ChatStore.Serialize(new StoreData
             {
-                Peers = [.. Peers],
+                Peers = [.. PeersToSave()],
                 Conversations = [.. Conversations],
                 Outbox = [.. _outbox],
                 SeenMessageIds = [.. _seenOrder],
@@ -278,6 +278,21 @@ public sealed partial class ChatService : ObservableObject, IDisposable
         {
             Log.Error("Sohbetler kaydedilemedi", ex);
         }
+    }
+
+    /// <summary>
+    /// Profilde yalnızca gerçekten gereken kişiler saklanır: bire bir sohbeti olanlar, grup üyeleri, engellenenler ve
+    /// giden kutusunda işi bekleyenler. "Ağdaki kişiler" listesinin geçmişi tutulmaz.
+    /// </summary>
+    private IEnumerable<Peer> PeersToSave()
+    {
+        var needed = new HashSet<string>(_outbox.Select(o => o.To));
+        foreach (var conv in Conversations)
+        {
+            if (conv.Group is { } g) needed.UnionWith(g.Members.Select(m => m.Id));
+            else needed.Add(conv.PeerId ?? conv.Id);
+        }
+        return Peers.Where(p => p.IsBlocked || needed.Contains(p.Id));
     }
 
     private void Tick()
@@ -355,6 +370,7 @@ public sealed partial class ChatService : ObservableObject, IDisposable
 
     private void SetOnline(Peer peer)
     {
+        peer.SeenThisSession = true;
         if (peer.IsOnline) return;
         peer.IsOnline = true;
         Log.Info($"Çevrimiçi: {peer.Name}");

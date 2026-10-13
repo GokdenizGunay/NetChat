@@ -106,6 +106,14 @@ public partial class Peer : ObservableObject
         : PresenceState.Idle;
 
     [JsonIgnore] public bool ShowOnlineDot => Presence == PresenceState.Online;
+
+    /// <summary>
+    /// "Ağdaki kişiler" listesindeki bölümün sırası: 0 Çevrimiçi, 1 Boşta, 2 Çevrimdışı. Durumunu gizleyen ama ağda
+    /// olan kişi "Çevrimiçi" bölümünde görünür (ağda olduğu zaten listede görünmesinden bellidir).
+    /// </summary>
+    [JsonIgnore] public int PresenceGroupOrder => !IsOnline ? 2 : Presence == PresenceState.Idle ? 1 : 0;
+
+    [JsonIgnore] public string PresenceGroup => PresenceGroupOrder switch { 0 => "Çevrimiçi", 1 => "Boşta", _ => "Çevrimdışı" };
     [JsonIgnore] public bool ShowIdleDot => Presence == PresenceState.Idle;
 
     /// <summary>"Çevrimiçi" veya "Son aktiflik: 00.04 · Boşta|Çevrimdışı".</summary>
@@ -143,6 +151,8 @@ public partial class Peer : ObservableObject
         OnPropertyChanged(nameof(ShowOnlineDot));
         OnPropertyChanged(nameof(ShowIdleDot));
         OnPropertyChanged(nameof(PresenceText));
+        OnPropertyChanged(nameof(PresenceGroupOrder));
+        OnPropertyChanged(nameof(PresenceGroup));
     }
 
     /// <summary>Gün değiştiğinde "dün" gibi göreli metinlerin yenilenmesi için.</summary>

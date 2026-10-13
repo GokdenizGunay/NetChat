@@ -90,7 +90,8 @@ public sealed class DialogHost : Grid
         buttons.Children.Add(primary);
         if (secondaryText != null)
         {
-            var secondary = new Button { Content = secondaryText, HorizontalAlignment = HorizontalAlignment.Stretch, IsCancel = true };
+            // Yalnızca düğmelerle kapanan diyalogda Esc de kapatmaz.
+            var secondary = new Button { Content = secondaryText, HorizontalAlignment = HorizontalAlignment.Stretch, IsCancel = dismissable };
             secondary.Click += (_, _) => Close(false);
             buttons.Children.Add(secondary);
         }
@@ -146,6 +147,12 @@ public sealed class DialogHost : Grid
 
     /// <summary>Açık diyaloğu kodla kapatır (ör. kapatılamayan bir işlem bittiğinde).</summary>
     public void Dismiss() => Close(false);
+
+    /// <summary>Açık diyalog (ve bu sırada açılanlar) kapanana kadar bekler.</summary>
+    public async Task WhenClosedAsync()
+    {
+        while (_pending is { } pending) await pending.Task;
+    }
 
     public Task<bool> ConfirmAsync(string title, string message, string primaryText, bool danger = false)
     {

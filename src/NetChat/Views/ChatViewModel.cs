@@ -87,6 +87,8 @@ public partial class ChatViewModel : ObservableObject, IDisposable
                 Refresh();
                 break;
             case nameof(Conversation.TypingText):
+                RefreshSubtitle();
+                break;
             case nameof(Conversation.Group):
                 Refresh();
                 break;

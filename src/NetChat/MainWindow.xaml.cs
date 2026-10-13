@@ -40,7 +40,7 @@ public partial class MainWindow : FluentWindow
         // Ctrl+L: kilitle (oturumu kapat, giriş ekranına dön).
         PreviewKeyDown += (_, e) =>
         {
-            if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control && App.IsSignedIn)
+            if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control && App.IsSignedIn && !App.IsUpdating)
             {
                 e.Handled = true;
                 ((App)Application.Current).Lock();
@@ -63,14 +63,65 @@ public partial class MainWindow : FluentWindow
             Anim.FadeIn(welcome, fromY: 18, ms: 320);
             if (message != null)
                 await WindowDialogs.ShowAsync("Oturum kapatıldı", MakeMessage(message), "Tamam", secondaryText: null);
-            // Yeni sürüm varsa giriş ekranına her dönüşte sorulur.
-            OfferUpdate();
+            await ShowLoginPromptsAsync(welcome);
         }
 
         if (previous != null && Host.Children.Contains(previous))
             Anim.FadeOut(previous, toY: -16, ms: 220, done: Swap);
         else
             Swap();
+    }
+
+    private bool _loginPromptsRunning;
+
+    /// <summary>
+    /// Giriş ekranına her gelişte sırayla: yeni sürüm varsa güncelleme önerisi, ardından Windows bildirimleri
+    /// kapalıysa uyarı. Açık bir diyalog varsa (ör. "Güncellendi") önce onun kapanması beklenir.
+    /// </summary>
+    private async Task ShowLoginPromptsAsync(WelcomeView welcome)
+    {
+        _loginPromptsRunning = true;
+        try
+        {
+            // Açılıştaki güncelleme denetimi sürüyorsa kısa bir süre beklenir ki güncelleme önerisi önce gelsin.
+            await Task.WhenAny(App.UpdateCheck, Task.Delay(TimeSpan.FromSeconds(5)));
+            await WindowDialogs.WhenClosedAsync();
+            if (_welcome != welcome) return;
+            var offered = await OfferUpdateAsync();
+            await WindowDialogs.WhenClosedAsync();
+            if (_welcome != welcome || App.IsSignedIn) return;
+            await WarnIfNotificationsOffAsync();
+            // Denetim bu sırada geç bittiyse güncelleme şimdi önerilir.
+            if (!offered && _welcome == welcome) await OfferUpdateAsync();
+        }
+        finally
+        {
+            _loginPromptsRunning = false;
+        }
+    }
+
+    // ------------------------------------------------------------------ Bildirim ayarı
+
+    private async Task WarnIfNotificationsOffAsync()
+    {
+        if (NotificationService.SystemNotificationsDisabled) await ShowNotificationsOffAsync();
+    }
+
+    /// <summary>"Bildirimler kapalı" diyaloğu; "Ayarları aç" Windows bildirim ayarlarını açar. Zil düğmesi de bunu kullanır.</summary>
+    public async Task ShowNotificationsOffAsync()
+    {
+        if (WindowDialogs.IsOpen) return;
+        var text = MakeMessage("Windows bildirimleri kapalı. Bu yüzden NetChat yeni mesajlar geldiğinde size bildirim gösteremez.\n\n" +
+                               "Bildirimleri açmak için Windows Ayarları › Sistem › Bildirimler bölümünde \"Bildirimler\" seçeneğini açın.");
+        if (!await WindowDialogs.ShowAsync("Bildirimler kapalı", text, "Ayarları aç", "Daha sonra", dismissable: false)) return;
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("ms-settings:notifications") { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Core.Log.Error("Bildirim ayarları açılamadı", ex);
+        }
     }
 
     // ------------------------------------------------------------------ Güncelleme
@@ -82,17 +133,31 @@ public partial class MainWindow : FluentWindow
         var text = previous != null
             ? $"NetChat 26, v{previous.ToString(3)} sürümünden v{current} sürümüne güncellendi."
             : $"NetChat 26, v{current} sürümüne güncellendi.";
-        _ = WindowDialogs.ShowAsync("Güncellendi", MakeMessage(text), "Tamam", secondaryText: null);
+        _ = WindowDialogs.ShowAsync("Güncellendi", MakeMessage(text), "Tamam", secondaryText: null, dismissable: false);
     }
 
-    /// <summary>Giriş ekranındayken yeni sürüm varsa güncellemeyi önerir.</summary>
+    /// <summary>Güncelleme denetimi giriş ekranındayken bittiyse: sıradaki uyarılar sürmüyorsa hemen sorar.</summary>
     public async void OfferUpdate()
     {
-        if (App.Updates.Available is not { } update || App.IsSignedIn || App.IsUpdating || WindowDialogs.IsOpen || _welcome == null) return;
+        if (_loginPromptsRunning) return;
+        await OfferUpdateAsync();
+    }
+
+    /// <summary>Giriş ekranındayken yeni sürüm varsa güncellemeyi önerir; öneri gösterildiyse true.</summary>
+    private async Task<bool> OfferUpdateAsync()
+    {
+        if (App.Updates.Available is not { } update || App.IsSignedIn || App.IsUpdating || WindowDialogs.IsOpen || _welcome == null) return false;
+        await PromptUpdateAsync(update);
+        return true;
+    }
+
+    /// <summary>"Yeni sürüm var" diyaloğu; "Güncelle" ile indirme ve kurulum başlar. Ayarlar'daki elle denetim de bunu kullanır.</summary>
+    public async Task PromptUpdateAsync(UpdateInfo update)
+    {
+        if (App.IsUpdating) return;
         var text = MakeMessage($"NetChat 26 v{update.Version.ToString(3)} yayımlandı. Kullandığınız sürüm: v{UpdateService.CurrentVersion.ToString(3)}.\n\n" +
                                "Güncelleme indirilip kurulduktan sonra uygulama yeniden başlatılır.");
-        if (!await WindowDialogs.ShowAsync("Yeni sürüm var", text, "Güncelle", "Daha sonra")) return;
-        await RunUpdateAsync(update);
+        if (await WindowDialogs.ShowAsync("Yeni sürüm var", text, "Güncelle", "Daha sonra", dismissable: false)) await RunUpdateAsync(update);
     }
 
     private async Task RunUpdateAsync(UpdateInfo update)
@@ -130,7 +195,7 @@ public partial class MainWindow : FluentWindow
                     ? "İndirme sırasında internet bağlantısı kesildi. Mevcut sürüm değişmedi."
                     : "İndirilen dosya doğrulanamadı. Mevcut sürüm değişmedi.";
             if (await WindowDialogs.ShowAsync("Güncelleme başarısız", FailureBody(reason, update),
-                    noAccess ? null : "Tekrar dene", noAccess ? "Kapat" : "Daha sonra"))
+                    noAccess ? null : "Tekrar dene", noAccess ? "Kapat" : "Daha sonra", dismissable: false))
                 await RunUpdateAsync(update);
         }
     }

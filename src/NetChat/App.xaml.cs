@@ -110,16 +110,17 @@ public partial class App : Application
         };
         Settings.ProfileChanged += () => Session?.UpdateSettings(Settings.SerializeForProfile(), Settings.DisplayName);
         FileAssociation.Register();
+        NotificationService.WatchSystemSetting();
 
         // Profiller şifreli olduğu için giriş yapılmadan çalışılamaz: her zaman giriş ekranıyla açılır.
         _window = new MainWindow();
         MainWindow = _window;
         _window.Show();
+        UpdateCheck = CheckForUpdatesAsync();
         _window.ShowLogin(null);
         if (openPath != null) _window.OpenProfileFile(openPath);
         // Yalnızca güncellemeden sonraki ilk açılış "--updated-from" ile başlatılır.
         if (justUpdated) _window.ShowUpdatedNotice(updatedFromVersion);
-        _ = CheckForUpdatesAsync();
         // Windows ile başlatıldıysa: giriş için şifre gerektiğinden görev çubuğunda simge durumunda bekle.
         if (minimized) _window.WindowState = WindowState.Minimized;
     }
@@ -173,7 +174,11 @@ public partial class App : Application
     }
 
     /// <summary>Kilit (Ctrl+L): oturumu kapatır, giriş ekranına döner. Bildirim ve mesaj alınmaz.</summary>
-    public void Lock() => EndSession(null);
+    public void Lock()
+    {
+        // İndirme sürerken oturum kapatılmaz (güncelleme bitince uygulama zaten yeniden başlar).
+        if (!IsUpdating) EndSession(null);
+    }
 
     /// <summary>Oturumu kapatır ve giriş ekranına döner; <paramref name="reason"/> verilirse açıklama gösterilir.</summary>
     public void EndSession(string? reason)
@@ -293,6 +298,9 @@ public partial class App : Application
                 break;
         }
     }
+    /// <summary>Açılıştaki güncelleme denetimi (giriş ekranı uyarıları sırayı korumak için bunu bekler).</summary>
+    public static Task UpdateCheck { get; private set; } = Task.CompletedTask;
+
     private async Task CheckForUpdatesAsync()
     {
         await Updates.CheckAsync();

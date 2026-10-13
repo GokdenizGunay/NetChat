@@ -24,6 +24,11 @@
         <StackPanel Margin="36,24,36,36" MaxWidth="860">
             <TextBlock Text="Ayarlar" FontSize="28" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
 
+            <!-- Yeni sürüm varken güncelleme kartı buraya, en üste taşınır -->
+            <StackPanel x:Name="UpdateTopHost" Visibility="Collapsed">
+                <TextBlock Text="Güncelleme" Style="{StaticResource SectionHeader}" Margin="2,24,0,8" />
+            </StackPanel>
+
             <!-- Profil -->
             <TextBlock Text="Profil" Style="{StaticResource SectionHeader}" Margin="2,24,0,8" />
             <Border x:Name="ProfileCard" Padding="16" CornerRadius="8" BorderThickness="1"
@@ -293,6 +298,17 @@
                 </ui:CardControl.Header>
                 <ui:Button Content="Uygulamadan çık" Click="OnExitClicked" />
             </ui:CardControl>
+            <StackPanel x:Name="UpdateBottomHost">
+                <ui:CardControl x:Name="UpdateCard" Icon="{ui:SymbolIcon ArrowSync24}" Margin="0,4,0,4">
+                    <ui:CardControl.Header>
+                        <StackPanel>
+                            <TextBlock Text="Güncellemeleri denetle" Style="{StaticResource RowTitle}" />
+                            <TextBlock x:Name="UpdateStatusText" Style="{StaticResource RowDesc}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </ui:CardControl.Header>
+                    <ui:Button x:Name="CheckUpdateButton" Content="Şimdi denetle" Click="OnCheckUpdatesClicked" />
+                </ui:CardControl>
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

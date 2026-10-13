@@ -25,6 +25,9 @@ public partial class SettingsView : UserControl
         MyCode.Code = Identity.Fingerprint(App.Identity.PublicKey);
         MyId.Text = $"Profil kimliği: {App.Identity.Id}";
         AboutText.Text = $"Sürüm {typeof(App).Assembly.GetName().Version?.ToString(3)}";
+        UpdateStatusText.Text = "Yeni bir sürüm olup olmadığını şimdi denetleyin";
+        ShowUpdateState();
+        App.Updates.AvailableChanged += OnUpdateAvailableChanged;
 
         LoadProfile();
         UpdateProfileLocation();
@@ -51,6 +54,7 @@ public partial class SettingsView : UserControl
     {
         _settings.PropertyChanged -= OnSettingsChanged;
         App.Network.Changed -= OnNetworkChanged;
+        App.Updates.AvailableChanged -= OnUpdateAvailableChanged;
     }
 
     public void FocusProfile()
@@ -245,6 +249,61 @@ public partial class SettingsView : UserControl
     }
 
     private void OnExitClicked(object sender, RoutedEventArgs e) => ((App)Application.Current).ExitApplication();
+
+    // ------------------------------------------------------------------ Güncelleme
+
+    private void OnUpdateAvailableChanged() => Dispatcher.BeginInvoke(ShowUpdateState);
+
+    /// <summary>Yeni sürüm varsa kart en üste taşınır ve düğmesi "Güncelle" olur; yoksa Hakkında bölümünde durur.</summary>
+    private void ShowUpdateState()
+    {
+        var update = App.Updates.Available;
+        var target = update != null ? UpdateTopHost : UpdateBottomHost;
+        if (UpdateCard.Parent != target)
+        {
+            ((Panel)UpdateCard.Parent).Children.Remove(UpdateCard);
+            target.Children.Add(UpdateCard);
+        }
+        UpdateTopHost.Visibility = update != null ? Visibility.Visible : Visibility.Collapsed;
+        CheckUpdateButton.Content = update != null ? "Güncelle" : "Şimdi denetle";
+        CheckUpdateButton.Appearance = update != null ? ControlAppearance.Primary : ControlAppearance.Secondary;
+        if (update != null) UpdateStatusText.Text = $"Yeni sürüm var: v{update.Version.ToString(3)} · Kullandığınız sürüm: v{Services.UpdateService.CurrentVersion.ToString(3)}";
+    }
+
+    private async void OnCheckUpdatesClicked(object sender, RoutedEventArgs e)
+    {
+        // Yeni sürüm zaten biliniyorsa doğrudan güncelleme diyaloğu.
+        if (App.Updates.Available is { } known)
+        {
+            if (Window.GetWindow(this) is MainWindow owner) await owner.PromptUpdateAsync(known);
+            return;
+        }
+        if (!Services.UpdateService.IsSupported)
+        {
+            UpdateStatusText.Text = "Otomatik güncelleme yalnızca yayımlanan NetChat.exe sürümünde kullanılabilir";
+            return;
+        }
+        CheckUpdateButton.IsEnabled = false;
+        UpdateStatusText.Text = "Denetleniyor…";
+        try
+        {
+            if (!await App.Updates.CheckAsync())
+            {
+                UpdateStatusText.Text = "Denetlenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin";
+                return;
+            }
+            if (App.Updates.Available is not { } update)
+            {
+                UpdateStatusText.Text = $"NetChat güncel (v{Services.UpdateService.CurrentVersion.ToString(3)})";
+                return;
+            }
+            if (Window.GetWindow(this) is MainWindow window) await window.PromptUpdateAsync(update);
+        }
+        finally
+        {
+            CheckUpdateButton.IsEnabled = true;
+        }
+    }
 
     // ------------------------------------------------------------------ Profil konumu
 

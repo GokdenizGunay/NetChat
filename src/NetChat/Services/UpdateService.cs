@@ -38,7 +38,20 @@ public sealed class UpdateService
         && path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Bulunan daha yeni sürüm; yoksa null.</summary>
-    public UpdateInfo? Available { get; private set; }
+    public UpdateInfo? Available
+    {
+        get => _available;
+        private set
+        {
+            if (_available == value) return;
+            _available = value;
+            AvailableChanged?.Invoke();
+        }
+    }
+    private UpdateInfo? _available;
+
+    /// <summary>Yeni sürüm bulundu ya da artık yok (denetimi başlatan iş parçacığında gelir).</summary>
+    public event Action? AvailableChanged;
 
     private static HttpClient CreateClient()
     {
@@ -57,18 +70,26 @@ public sealed class UpdateService
         return match == null ? null : new Version(int.Parse(match.Groups[1].Value), int.Parse(match.Groups[2].Value), int.Parse(match.Groups[3].Value));
     }
 
-    /// <summary>Son yayını denetler. Ağ yoksa ya da yayın bulunamazsa sessizce hiçbir şey yapmaz.</summary>
-    public async Task CheckAsync()
+    /// <summary>
+    /// Son yayını denetler; yeni sürüm varsa <see cref="Available"/> dolar. Denetim yapılamadıysa (ağ yok, yayın okunamadı)
+    /// false döner.
+    /// </summary>
+    public async Task<bool> CheckAsync()
     {
-        if (!IsSupported) return;
+        if (!IsSupported) return false;
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             using var response = await Http.GetAsync(LatestReleaseUrl, cts.Token);
-            if (!response.IsSuccessStatusCode) return;
+            if (!response.IsSuccessStatusCode) return false;
             using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cts.Token));
             var root = doc.RootElement;
-            if (ParseTag(root.GetProperty("tag_name").GetString() ?? "") is not { } version || version <= CurrentVersion) return;
+            if (ParseTag(root.GetProperty("tag_name").GetString() ?? "") is not { } version) return false;
+            if (version <= CurrentVersion)
+            {
+                Available = null;
+                return true;
+            }
 
             foreach (var asset in root.GetProperty("assets").EnumerateArray())
             {
@@ -80,12 +101,14 @@ public sealed class UpdateService
                 Available = new UpdateInfo(version, asset.GetProperty("browser_download_url").GetString() ?? "",
                     asset.GetProperty("size").GetInt64(), sha, root.GetProperty("html_url").GetString() ?? "");
                 Log.Info($"Yeni sürüm bulundu: {version}");
-                return;
+                return true;
             }
+            return false;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or InvalidOperationException)
         {
             Log.Info("Güncelleme denetlenemedi: " + ex.Message);
+            return false;
         }
     }
 
