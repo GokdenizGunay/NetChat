@@ -92,7 +92,7 @@
                         <TextBlock Text="Yeni profil" Style="{StaticResource FormTitle}" />
                         <TextBlock Text="Kullanıcı adı" Style="{StaticResource FieldLabel}" Margin="2,0,0,4" />
                         <ui:TextBox x:Name="NewName" PlaceholderText="Ağdaki diğer kullanıcılara görünür" MaxLength="32"
-                                    Icon="{ui:SymbolIcon Person24}" AutomationProperties.Name="Kullanıcı adı" />
+                                    Icon="{ui:SymbolIcon Person24}" AutomationProperties.Name="Kullanıcı adı" TextChanged="OnNewNameChanged" />
                         <TextBlock Text="Şifre (en az 4 karakter)" Style="{StaticResource FieldLabel}" />
                         <ui:PasswordBox x:Name="NewPassword" PlaceholderText="Şifre" AutomationProperties.Name="Şifre" />
                         <ui:PasswordBox x:Name="NewPasswordRepeat" PlaceholderText="Şifreyi tekrarla" Margin="0,8,0,0"
@@ -133,7 +133,7 @@
                         <TextBlock Text="Bu ad ağda kullanılıyor" Style="{StaticResource FormTitle}" />
                         <TextBlock x:Name="RenameText" FontSize="13" TextWrapping="Wrap" Margin="2,0,0,10"
                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                        <ui:TextBox x:Name="RenameBox" MaxLength="32" Icon="{ui:SymbolIcon Person24}" KeyDown="OnRenameKeyDown"
+                        <ui:TextBox x:Name="RenameBox" MaxLength="32" Icon="{ui:SymbolIcon Person24}" KeyDown="OnRenameKeyDown" TextChanged="OnRenameChanged"
                                     AutomationProperties.Name="Yeni kullanıcı adı" />
                         <TextBlock x:Name="RenameError" Style="{StaticResource ErrorLine}" />
                         <Grid Margin="0,16,0,0">

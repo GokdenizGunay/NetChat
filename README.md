@@ -8,7 +8,8 @@ Yerel ağdaki diğer cihazlarla sunucusuz, şifreli mesajlaşma. Windows 10 ve W
 - **Şifreli profiller:** Her profil, şifreyle korunan tek bir `.nprofile` dosyasıdır. Bilgisayarda ya da seçtiğiniz bir klasörde (ör. USB bellek) saklanabilir ve başka bir bilgisayarda açılabilir.
 - **Kilit (Ctrl+L):** Oturumu kapatıp giriş ekranına döner.
 - **Sohbet:** Bire bir ve grup sohbetleri, yanıtlama, ifade bırakma, gruplarda @etiketleme, renkli emoji, okundu bilgisi.
-- **Dosya gönderme:** Ekle düğmesiyle ya da sohbete sürükleyip bırakarak.
+- **Dosya gönderme:** Ekle düğmesiyle ya da sohbete sürükleyip bırakarak. Alınan dosyalar sağ tık › *Kaydet...* ile istenen yere kaydedilir.
+- **Profil resmi ve cihaz kodu:** Profil resmi eklenebilir. Her bilgisayarın değişmeyen bir cihaz kodu vardır (ör. `megacircuit#5543`); kişiler sohbetlerde `ad#5543` biçiminde görünür.
 - **Gruplar:** Yöneticiler, susturma, üye ekleme/çıkarma, "yalnızca yöneticiler yazabilir" gibi ayarlar. Grup bilgileri yönetici çevrimdışıyken de üyeler arasında güncel kalır.
 - **Çevrimdışı kişiler:** Çevrimdışı birine gönderilen mesajlar, o kişi ağa bağlandığında iletilir.
 - **Gizlilik:** Çevrimiçi durumu, son aktiflik, okundu bilgisi, sizi gruplara kimlerin ekleyebileceği ve mesaj geçmişinin saklanması ayarlanabilir. Engelleme ve sessize alma desteklenir.

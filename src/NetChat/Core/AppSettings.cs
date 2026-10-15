@@ -30,6 +30,8 @@ public enum AppThemeMode
 public partial class AppSettings : ObservableObject
 {
     [ObservableProperty] private string _displayName = "";
+    /// <summary>Profil resmi (Base64 JPEG, <see cref="ProfilePicture"/>); yoksa null.</summary>
+    [ObservableProperty] private string? _avatar;
     [ObservableProperty] private bool _notificationsEnabled = true;
     [ObservableProperty] private bool _showMessagePreview = true;
     [ObservableProperty] private bool _notificationSound = true;
@@ -48,7 +50,6 @@ public partial class AppSettings : ObservableObject
     [ObservableProperty] private DateTimeOffset? _lastActive;
     [ObservableProperty] private bool _runInBackground = true;
     [ObservableProperty] private bool _backgroundHintShown;
-    [ObservableProperty] private string _downloadFolder = "";
     [ObservableProperty] private List<string> _recentEmoji = [];
     [ObservableProperty] private GroupAddMode _groupAddMode = GroupAddMode.Everyone;
     [ObservableProperty] private List<string> _groupAddOnly = [];
@@ -60,10 +61,6 @@ public partial class AppSettings : ObservableObject
     [ObservableProperty] private double _windowHeight = 760;
     [ObservableProperty] private double _listWidth = 330;
     [ObservableProperty] private double _infoWidth = 320;
-
-    [JsonIgnore]
-    public string EffectiveDownloadFolder =>
-        string.IsNullOrWhiteSpace(DownloadFolder) ? AppPaths.DefaultDownloadDir : DownloadFolder;
 
     /// <summary>Profil paketine yazılması gereken bir ayar değişti.</summary>
     public event Action? ProfileChanged;
@@ -79,8 +76,7 @@ public partial class AppSettings : ObservableObject
         var settings = new AppSettings();
         settings.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(DownloadFolder)) settings.OnPropertyChanged(nameof(EffectiveDownloadFolder));
-            if (settings._suspend > 0 || e.PropertyName == nameof(EffectiveDownloadFolder)) return;
+            if (settings._suspend > 0) return;
             settings.ProfileChanged?.Invoke();
         };
         return settings;

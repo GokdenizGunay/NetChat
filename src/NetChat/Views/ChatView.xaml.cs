@@ -196,9 +196,13 @@ public partial class ChatView : UserControl
         HeaderAvatar.SetBinding(Avatar.TextProperty, new Binding(nameof(Models.Conversation.Initials)) { Source = conv });
         HeaderAvatar.Key = conv.ColorKey;
         HeaderAvatar.IsGroup = conv.IsGroup;
+        HeaderAvatar.SetBinding(Avatar.ImageProperty, new Binding("Peer.AvatarImage") { Source = conv });
+        // Başlığın sağında karşı tarafın cihaz kodu (profil adı olmadan); grupta ve kodu bilinmeyen kişide gizli.
+        HeaderDevice.SetBinding(System.Windows.Controls.TextBlock.TextProperty, new Binding("Peer.DeviceCode") { Source = conv });
+        HeaderDevice.SetBinding(VisibilityProperty, new Binding("Peer.DeviceCode") { Source = conv, Converter = (IValueConverter)FindResource("NullToVis"), FallbackValue = Visibility.Collapsed });
         HeaderAvatar.SetBinding(Avatar.IsOnlineProperty, new Binding("Peer.ShowOnlineDot") { Source = conv, FallbackValue = false });
         HeaderAvatar.SetBinding(Avatar.IsIdleProperty, new Binding("Peer.ShowIdleDot") { Source = conv, FallbackValue = false });
-        HeaderTitle.SetBinding(Emoji.Wpf.TextBlock.TextProperty, new Binding(nameof(Models.Conversation.Title)) { Source = conv });
+        HeaderTitle.SetBinding(Emoji.Wpf.TextBlock.TextProperty, new Binding(nameof(Models.Conversation.DisplayTitle)) { Source = conv });
 
         Messages.ItemsSource = conv.Messages;
         _newWhileScrolledUp = 0;
@@ -320,7 +324,7 @@ public partial class ChatView : UserControl
 
     private void OnConversationPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(Models.Conversation.Group) or nameof(Models.Conversation.Title) or nameof(Models.Conversation.IsMuted))
+        if (e.PropertyName is nameof(Models.Conversation.Group) or nameof(Models.Conversation.Title) or nameof(Models.Conversation.DisplayTitle) or nameof(Models.Conversation.IsMuted))
             RefreshInfo();
         if (e.PropertyName == nameof(Models.Conversation.IsMuted) && _vm != null)
             HeaderMuted.Visibility = _vm.Conversation.IsMuted ? Visibility.Visible : Visibility.Collapsed;
@@ -749,13 +753,16 @@ public partial class ChatView : UserControl
             return;
         }
         var hasFile = msg.IsFile && msg.LocalPath != null && File.Exists(msg.LocalPath);
+        // Alınan dosyalar geçici klasördedir: "Klasörde göster" yalnızca gönderdiğimiz (kendi diskimizdeki) dosyalar için.
+        var isReceivedCopy = hasFile && IsInFilesDir(msg.LocalPath!);
         foreach (var item in menu.Items.OfType<MenuItem>())
         {
             item.Visibility = (item.Tag as string) switch
             {
                 "reply" or "react" => !msg.IsDeleted && _vm?.BlockedReason == null ? Visibility.Visible : Visibility.Collapsed,
                 "copy" => !msg.IsDeleted && msg.Kind == MessageKind.Text ? Visibility.Visible : Visibility.Collapsed,
-                "open" or "folder" => hasFile ? Visibility.Visible : Visibility.Collapsed,
+                "open" or "save" => hasFile ? Visibility.Visible : Visibility.Collapsed,
+                "folder" => hasFile && !isReceivedCopy ? Visibility.Visible : Visibility.Collapsed,
                 "retry" => msg.IsOutgoing && !msg.IsDeleted && msg.Status is MessageStatus.Pending or MessageStatus.Failed
                     ? Visibility.Visible : Visibility.Collapsed,
                 "deleteall" => _chat.CanDeleteForEveryone(msg) ? Visibility.Visible : Visibility.Collapsed,
@@ -782,8 +789,48 @@ public partial class ChatView : UserControl
 
     private void OnImageClicked(object sender, MouseButtonEventArgs e) => OpenFile(MessageOf(sender));
 
-    private static void OpenFile(ChatMessage? msg)
+    private static bool IsInFilesDir(string path) =>
+        System.IO.Path.GetFullPath(path).StartsWith(System.IO.Path.GetFullPath(NetChat.Core.AppPaths.FilesDir) + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Dosyayı seçilen yere kaydeder (alınan dosyalar oturum kapanınca silinir).</summary>
+    private async void OnSaveFileClicked(object sender, RoutedEventArgs e)
     {
+        if (MessageOf(sender) is not { LocalPath: { } source } msg || !File.Exists(source)) return;
+        var name = msg.FileName ?? System.IO.Path.GetFileName(source);
+        var ext = System.IO.Path.GetExtension(name);
+        var dialog = new SaveFileDialog
+        {
+            Title = "Dosyayı kaydet",
+            FileName = name,
+            Filter = string.IsNullOrEmpty(ext) ? "Tüm dosyalar|*.*" : $"{ext.TrimStart('.').ToUpperInvariant()} dosyası|*{ext}|Tüm dosyalar|*.*",
+            DefaultExt = ext,
+            AddExtension = !string.IsNullOrEmpty(ext),
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) is { } home && Directory.Exists(System.IO.Path.Combine(home, "Downloads"))
+                ? System.IO.Path.Combine(home, "Downloads") : null,
+        };
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
+        var target = dialog.FileName;
+        try
+        {
+            if (!string.Equals(System.IO.Path.GetFullPath(target), System.IO.Path.GetFullPath(source), StringComparison.OrdinalIgnoreCase))
+                await Task.Run(() => File.Copy(source, target, overwrite: true));
+            _chat.ShowInfo($"Kaydedildi: {System.IO.Path.GetFileName(target)}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            NetChat.Core.Log.Error("Dosya kaydedilemedi", ex);
+            _chat.ShowInfo("Dosya kaydedilemedi: " + ex.Message);
+        }
+    }
+
+    private void OpenFile(ChatMessage? msg)
+    {
+        if (msg is { IsFile: true, Transfer: TransferState.Completed } && (msg.LocalPath == null || !File.Exists(msg.LocalPath)))
+        {
+            // Alınan dosyalar cihazda kalıcı tutulmaz; önceki oturumdan kalan mesajın dosyası artık yoktur.
+            _chat.ShowInfo("Bu dosya artık bu cihazda yok. Alınan dosyalar oturum kapanınca silinir; saklamak için \"Kaydet...\" kullanın.");
+            return;
+        }
         if (msg?.LocalPath == null || !File.Exists(msg.LocalPath)) return;
         try
         {
@@ -878,13 +925,20 @@ public partial class ChatView : UserControl
         InfoAvatar.Text = conv.Initials;
         InfoAvatar.Key = conv.ColorKey;
         InfoAvatar.IsGroup = conv.IsGroup;
+        InfoAvatar.SetBinding(Avatar.ImageProperty, new Binding("Peer.AvatarImage") { Source = conv });
         InfoName.Text = conv.Title;
+        var device = conv.IsGroup ? null : conv.Peer?.DeviceCode;
+        // Bire bir sohbette ad, cihaz etiketiyle gösterilir ("elaa#5543").
+        InfoName.Text = conv.DisplayTitle;
+        InfoDevice.Text = device ?? "";
+        InfoDevice.Visibility = device != null ? Visibility.Visible : Visibility.Collapsed;
         GroupInfo.Visibility = conv.IsGroup ? Visibility.Visible : Visibility.Collapsed;
         PeerInfo.Visibility = conv.IsGroup ? Visibility.Collapsed : Visibility.Visible;
 
         if (conv.IsGroup && conv.Group is { } g)
         {
-            InfoSub.Text = $"Grup · {g.Members.Count} üye · {g.CreatedAt.ToLocalTime():d MMMM yyyy}";
+            var created = g.CreatedAt.ToLocalTime().ToString("d MMMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("tr-TR"));
+            InfoSub.Text = $"Grup · {g.Members.Count} üye · {created}";
             GroupDesc.Text = g.Description;
             GroupDesc.Visibility = string.IsNullOrWhiteSpace(g.Description) ? Visibility.Collapsed : Visibility.Visible;
             EditInfoPanel.Visibility = _vm.CanEditInfo ? Visibility.Visible : Visibility.Collapsed;
@@ -963,6 +1017,25 @@ public partial class ChatView : UserControl
     private void OnOnlyAdminsEditClicked(object sender, RoutedEventArgs e)
     {
         if (_vm != null && !_refreshingInfo) _chat.SetOnlyAdminsCanEdit(_vm.Conversation, OnlyAdminsEditToggle.IsChecked == true);
+    }
+
+    /// <summary>Başlıktaki cihaz koduna tıklanınca: kodun ne olduğunu kısaca anlatır.</summary>
+    private async void OnHeaderDeviceClicked(object sender, MouseButtonEventArgs e)
+    {
+        if (_vm?.Conversation.Peer is not { DeviceCode: { } code } peer || FindShell() is not { } shell) return;
+        e.Handled = true;
+        var text = new System.Windows.Controls.TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 14,
+            LineHeight = 21,
+            Text = $"{code}, {peer.Name} adlı kişinin profilinin şu anda açık olduğu bilgisayarın kodudur.\n\n" +
+                   "Her bilgisayarın kendine ait, değişmeyen bir kodu vardır. NetChat silinse ya da yeniden yüklense de aynı kalır. " +
+                   "Farklı profillerde aynı kodu görüyorsanız, bu profiller aynı bilgisayarda açılmıştır.\n\n" +
+                   "Kod bilgisayarın donanımından türetilir; koddan bilgisayar hakkında bilgi çıkarılamaz.",
+        };
+        text.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "TextFillColorSecondaryBrush");
+        await shell.DialogHost.ShowAsync("Cihaz kodu", text, "Tamam", secondaryText: null);
     }
 
     private async void OnAddMembersClicked(object sender, RoutedEventArgs e)

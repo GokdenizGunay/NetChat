@@ -14,10 +14,10 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <c:Avatar Size="44" Text="{Binding Initials}" Key="{Binding ColorKey}" IsGroup="{Binding IsGroup}"
+                <c:Avatar Size="44" Text="{Binding Initials}" Key="{Binding ColorKey}" IsGroup="{Binding IsGroup}" Image="{Binding Peer.AvatarImage}"
                           ShowPresence="True" IsOnline="{Binding Peer.ShowOnlineDot, FallbackValue=False}" IsIdle="{Binding Peer.ShowIdleDot, FallbackValue=False}" VerticalAlignment="Center" />
                 <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                    <TextBlock Text="{Binding DisplayTitle}" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
                     <Grid Margin="0,3,0,0">
                         <TextBlock Text="{Binding TypingText}" FontSize="12.5" FontStyle="Italic"
@@ -69,13 +69,13 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <c:Avatar Size="40" Text="{Binding Initials}" Key="{Binding Id}" ShowPresence="True" IsOnline="{Binding ShowOnlineDot}" IsIdle="{Binding ShowIdleDot}"
+                <c:Avatar Size="40" Text="{Binding Initials}" Key="{Binding Id}" Image="{Binding AvatarImage}" ShowPresence="True" IsOnline="{Binding ShowOnlineDot}" IsIdle="{Binding ShowIdleDot}"
                           VerticalAlignment="Center" />
                 <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
                     <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
                     <TextBlock FontSize="12" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"
-                               Text="{Binding PresenceText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                               Text="{Binding NetworkSubtitle}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
                 <TextBlock x:Name="AddressText" Grid.Column="2" Text="{Binding Address}" FontSize="11" VerticalAlignment="Center"
                            Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
@@ -291,7 +291,7 @@
                         </ListBox.ContextMenu>
                     </ListBox>
                     <ListBox x:Name="PeopleList" IsSynchronizedWithCurrentItem="False" Style="{StaticResource BareListBox}" ItemContainerStyle="{StaticResource NavListItem}"
-                             ItemTemplate="{StaticResource PeerTemplate}" Visibility="Collapsed" Padding="0,4,0,8"
+                             ItemTemplate="{StaticResource PeerTemplate}" Visibility="Collapsed" Padding="0,4,0,8" ScrollViewer.CanContentScroll="False"
                              SelectionChanged="OnPeerSelected">
                         <ListBox.GroupStyle>
                             <GroupStyle>

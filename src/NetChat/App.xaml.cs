@@ -111,6 +111,7 @@ public partial class App : Application
         Settings.ProfileChanged += () => Session?.UpdateSettings(Settings.SerializeForProfile(), Settings.DisplayName);
         FileAssociation.Register();
         NotificationService.WatchSystemSetting();
+        Controls.SmoothScroll.Register();
 
         // Profiller şifreli olduğu için giriş yapılmadan çalışılamaz: her zaman giriş ekranıyla açılır.
         _window = new MainWindow();

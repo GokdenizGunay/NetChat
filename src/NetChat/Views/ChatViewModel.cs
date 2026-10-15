@@ -20,6 +20,7 @@ public partial class MemberItem : ObservableObject
 
     public string DisplayName => IsMe ? $"{Name} (Siz)" : Name;
     public string Initials => Conversation.MakeInitials(Name);
+    public System.Windows.Media.ImageSource? AvatarImage => IsMe ? NetChat.Core.ProfilePicture.Decode(App.Settings.Avatar) : Peer?.AvatarImage;
 
     public string? RoleText => IsOwner ? "Kurucu" : IsAdmin ? "Yönetici" : IsMuted ? "Susturuldu" : null;
 }

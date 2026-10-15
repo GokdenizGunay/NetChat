@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Wpf.Ui.Controls;
@@ -6,7 +6,7 @@ using TextBlock = System.Windows.Controls.TextBlock;
 
 namespace NetChat.Controls;
 
-/// <summary>Baş harfli, renkli dairesel avatar; isteğe bağlı çevrimiçi göstergesi.</summary>
+/// <summary>Dairesel avatar: profil resmi varsa resim, yoksa renkli zeminde baş harfler; isteğe bağlı çevrimiçi göstergesi.</summary>
 public sealed class Avatar : Grid
 {
     public static readonly DependencyProperty TextProperty =
@@ -27,6 +27,9 @@ public sealed class Avatar : Grid
     public static readonly DependencyProperty IsIdleProperty =
         DependencyProperty.Register(nameof(IsIdle), typeof(bool), typeof(Avatar), new PropertyMetadata(false, (d, _) => ((Avatar)d).Refresh()));
 
+    public static readonly DependencyProperty ImageProperty =
+        DependencyProperty.Register(nameof(Image), typeof(ImageSource), typeof(Avatar), new PropertyMetadata(null, (d, _) => ((Avatar)d).Refresh()));
+
     public static readonly DependencyProperty ShowPresenceProperty =
         DependencyProperty.Register(nameof(ShowPresence), typeof(bool), typeof(Avatar), new PropertyMetadata(false, (d, _) => ((Avatar)d).Refresh()));
 
@@ -38,6 +41,8 @@ public sealed class Avatar : Grid
     /// <summary>Boşta: pencere arka planda (sarı nokta).</summary>
     public bool IsIdle { get => (bool)GetValue(IsIdleProperty); set => SetValue(IsIdleProperty, value); }
     public bool ShowPresence { get => (bool)GetValue(ShowPresenceProperty); set => SetValue(ShowPresenceProperty, value); }
+    /// <summary>Profil resmi; null ise baş harfler gösterilir.</summary>
+    public ImageSource? Image { get => (ImageSource?)GetValue(ImageProperty); set => SetValue(ImageProperty, value); }
 
     private static readonly SolidColorBrush OnlineBrush = Frozen(Color.FromRgb(0x2E, 0xB8, 0x5C));
     private static readonly SolidColorBrush IdleBrush = Frozen(Color.FromRgb(0xF2, 0xB1, 0x1A));
@@ -90,10 +95,13 @@ public sealed class Avatar : Grid
         Width = Height = s;
         _circle.Width = _circle.Height = s;
         _circle.CornerRadius = new CornerRadius(s / 2);
-        _circle.Background = AvatarPalette.BrushFor(Key);
+        var image = IsGroup ? null : Image;
+        _circle.Background = image != null
+            ? new ImageBrush(image) { Stretch = Stretch.UniformToFill }
+            : AvatarPalette.BrushFor(Key);
         _initials.Text = Text;
         _initials.FontSize = Math.Max(9, s * 0.38);
-        _initials.Visibility = IsGroup ? Visibility.Collapsed : Visibility.Visible;
+        _initials.Visibility = IsGroup || image != null ? Visibility.Collapsed : Visibility.Visible;
         _groupIcon.Visibility = IsGroup ? Visibility.Visible : Visibility.Collapsed;
         _groupIcon.FontSize = s * 0.5;
         var dot = Math.Max(10, s * 0.3);

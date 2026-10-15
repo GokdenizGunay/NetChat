@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Data;
@@ -82,6 +82,8 @@ public sealed class StatusToSymbolConverter : IValueConverter
 
 public sealed class TimeTextConverter : IValueConverter
 {
+    private static readonly CultureInfo Turkish = CultureInfo.GetCultureInfo("tr-TR");
+
     /// <summary>Sohbet listesi için: bugün → saat, dün → "Dün", bu hafta → gün adı, daha eski → tarih.</summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
@@ -91,8 +93,9 @@ public sealed class TimeTextConverter : IValueConverter
         var today = DateTime.Today;
         if (day == today) return local.ToString("HH:mm", culture);
         if (day == today.AddDays(-1)) return "Dün";
-        if ((today - day).TotalDays < 7) return local.ToString("dddd", culture);
-        return local.ToString("dd.MM.yyyy", culture);
+        // Arayüz Türkçe: gün adları sistem dilinden bağımsız olarak Türkçe yazılır.
+        if ((today - day).TotalDays < 7) return local.ToString("dddd", Turkish);
+        return local.ToString("dd.MM.yyyy", Turkish);
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();

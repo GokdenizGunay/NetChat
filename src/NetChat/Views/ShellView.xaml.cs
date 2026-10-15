@@ -37,7 +37,7 @@ public partial class ShellView : UserControl
         _conversations.LiveFilteringProperties.Add(nameof(Conversation.Title));
         ConversationList.ItemsSource = _conversations;
 
-        // Yalnızca bu oturumda ağda görülen kişiler; Çevrimiçi / Boşta / Çevrimdışı bölümlerinde.
+        // Yalnızca bu oturumda ağda görülen kişiler (bizi engelleyenler hariç); Çevrimiçi / Boşta / Çevrimdışı bölümlerinde.
         _people = new ListCollectionView(_chat.Peers) { Filter = PeopleFilter };
         _people.GroupDescriptions.Add(new PropertyGroupDescription(nameof(Peer.PresenceGroup)));
         _people.SortDescriptions.Add(new SortDescription(nameof(Peer.PresenceGroupOrder), ListSortDirection.Ascending));
@@ -49,6 +49,7 @@ public partial class ShellView : UserControl
         _people.LiveGroupingProperties.Add(nameof(Peer.PresenceGroup));
         _people.IsLiveFiltering = true;
         _people.LiveFilteringProperties.Add(nameof(Peer.SeenThisSession));
+        _people.LiveFilteringProperties.Add(nameof(Peer.BlocksMe));
         _people.LiveFilteringProperties.Add(nameof(Peer.Name));
         PeopleList.ItemsSource = _people;
 
@@ -86,7 +87,7 @@ public partial class ShellView : UserControl
 
     private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(App.Settings.DisplayName)) UpdateProfile();
+        if (e.PropertyName is nameof(App.Settings.DisplayName) or nameof(App.Settings.Avatar)) UpdateProfile();
         if (e.PropertyName == nameof(App.Settings.NotificationsMuted)) UpdateBell();
     }
 
@@ -110,6 +111,7 @@ public partial class ShellView : UserControl
     {
         MyAvatar.Text = Conversation.MakeInitials(App.Settings.DisplayName);
         MyAvatar.Key = _chat.MyId;
+        MyAvatar.Image = NetChat.Core.ProfilePicture.Decode(App.Settings.Avatar);
         ProfileButton.ToolTip = App.Settings.DisplayName;
     }
 
@@ -144,14 +146,14 @@ public partial class ShellView : UserControl
         var chats = ChatsTab.IsChecked == true || SettingsTab.IsChecked == true && ConversationList.Visibility == Visibility.Visible;
         EmptyChats.Visibility = chats && _chat.Conversations.Count == 0 && string.IsNullOrEmpty(SearchBox.Text)
             ? Visibility.Visible : Visibility.Collapsed;
-        EmptyPeople.Visibility = PeopleList.Visibility == Visibility.Visible && !_chat.Peers.Any(p => p.SeenThisSession)
+        EmptyPeople.Visibility = PeopleList.Visibility == Visibility.Visible && !_chat.Peers.Any(IsListed)
             ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>Ağdaki kişiler simgesinde çevrimiçi kişi sayısı.</summary>
     private void UpdatePeopleBadge()
     {
-        var online = _chat.Peers.Count(p => p.IsOnline);
+        var online = _chat.Peers.Count(p => p.IsOnline && !p.BlocksMe);
         PeopleBadgeText.Text = online > 99 ? "99+" : online.ToString();
         var tip = online > 0 ? $"Ağdaki kişiler ({online} çevrimiçi)" : "Ağdaki kişiler";
         PeopleTab.ToolTip = tip;
@@ -165,7 +167,7 @@ public partial class ShellView : UserControl
         UpdatePeopleBadge();
         if (PeopleList.Visibility == Visibility.Visible)
         {
-            var online = _chat.Peers.Count(p => p.IsOnline);
+            var online = _chat.Peers.Count(p => p.IsOnline && !p.BlocksMe);
             ListTitle.Text = online > 0 ? $"Ağdaki kişiler ({online})" : "Ağdaki kişiler";
         }
         else
@@ -185,7 +187,8 @@ public partial class ShellView : UserControl
     private void OnPeerPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(Peer.IsOnline)) UpdateListTitle();
-        if (e.PropertyName == nameof(Peer.SeenThisSession)) UpdateEmptyStates();
+        if (e.PropertyName is nameof(Peer.SeenThisSession) or nameof(Peer.BlocksMe)) UpdateEmptyStates();
+        if (e.PropertyName == nameof(Peer.BlocksMe)) UpdateListTitle();
     }
 
     private void ShowInfo(string text)
@@ -301,8 +304,11 @@ public partial class ShellView : UserControl
 
     private string _peopleQuery = "";
 
+    /// <summary>Ağdaki kişiler listesinde görünür mü: bu oturumda görüldü ve bizi engellemedi.</summary>
+    private static bool IsListed(Peer p) => p.SeenThisSession && !p.BlocksMe;
+
     private bool PeopleFilter(object o) =>
-        o is Peer p && p.SeenThisSession &&
+        o is Peer p && IsListed(p) &&
         (_peopleQuery.Length == 0 || p.Name.Contains(_peopleQuery, StringComparison.CurrentCultureIgnoreCase));
 
     private void OnSearchChanged(object sender, TextChangedEventArgs e)

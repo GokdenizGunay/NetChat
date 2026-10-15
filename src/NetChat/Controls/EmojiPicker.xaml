@@ -81,7 +81,7 @@
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             <ListBox x:Name="Rows" Style="{StaticResource BareListBox}" ItemContainerStyle="{StaticResource MessageListItem}"
                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
-                     ScrollViewer.CanContentScroll="True">
+                     VirtualizingPanel.ScrollUnit="Pixel" ScrollViewer.CanContentScroll="True">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
                         <ItemsControl ItemsSource="{Binding}">

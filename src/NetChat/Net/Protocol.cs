@@ -16,6 +16,8 @@ namespace NetChat.Net;
 [JsonDerivedType(typeof(GroupStatePacket), "group")]
 [JsonDerivedType(typeof(PingPacket), "ping")]
 [JsonDerivedType(typeof(ReactionPacket), "react")]
+[JsonDerivedType(typeof(AvatarRequestPacket), "avreq")]
+[JsonDerivedType(typeof(AvatarPacket), "avatar")]
 public abstract class Packet
 {
 }
@@ -92,6 +94,17 @@ public sealed class GroupStatePacket : Packet
 
 public sealed class PingPacket : Packet
 {
+}
+
+/// <summary>Karşı tarafın profil resmini ister (duyurudaki parmak izi bizdekinden farklıysa).</summary>
+public sealed class AvatarRequestPacket : Packet
+{
+}
+
+/// <summary>Profil resmi (Base64 JPEG); null = resim yok.</summary>
+public sealed class AvatarPacket : Packet
+{
+    public string? Data { get; set; }
 }
 
 /// <summary>Şifreli çerçevelerin içeriğini kodlar/çözer.</summary>

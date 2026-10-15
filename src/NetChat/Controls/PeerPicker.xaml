@@ -26,7 +26,7 @@
                                 </Style>
                             </CheckBox.Style>
                             <StackPanel Orientation="Horizontal">
-                                <c:Avatar Size="32" Text="{Binding Peer.Initials}" Key="{Binding Peer.Id}" ShowPresence="True"
+                                <c:Avatar Size="32" Text="{Binding Peer.Initials}" Key="{Binding Peer.Id}" Image="{Binding Peer.AvatarImage}" ShowPresence="True"
                                           IsOnline="{Binding Peer.ShowOnlineDot}" IsIdle="{Binding Peer.ShowIdleDot}" />
                                 <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding Peer.Name}" FontSize="14" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />

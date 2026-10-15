@@ -29,14 +29,17 @@ public static class AppPaths
     public static string ResourceDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "NetChat", "res");
 
-    /// <summary>Bildirim görselleri için geçici klasör; oturum kapanınca silinir.</summary>
+    /// <summary>Bildirim görselleri ve alınan dosyalar için geçici klasör; oturum kapanınca (ve açılışta) silinir.</summary>
     public static string TempDir => Path.Combine(Path.GetTempPath(), $"{AppId}-{Profile}");
+
+    /// <summary>
+    /// Sohbetlerde alınan dosyalar önce buraya iner; kullanıcı "Kaydet..." ile istediği yere kopyalar. Cihazda kalıcı
+    /// veri bırakılmaz: oturum kapanınca silinir.
+    /// </summary>
+    public static string FilesDir => Path.Combine(TempDir, "files");
 
     /// <summary>Ayrıntılı (bilgi) günlüğü yalnızca "--log" ile açılır; hatalar her zaman yazılır (bkz. <see cref="Log"/>).</summary>
     public static bool LoggingEnabled { get; set; }
-
-    public static string DefaultDownloadDir =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "NetChat");
 
     public static void Initialize(string? profile)
     {

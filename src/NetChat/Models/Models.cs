@@ -50,6 +50,49 @@ public partial class Peer : ObservableObject
 
     [ObservableProperty] private bool _isBlocked;
 
+    /// <summary>Kişinin profilinin açık olduğu cihazın kodu (ör. "spacecookie#2863"); son duyurusuna göre.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NetworkSubtitle))]
+    [NotifyPropertyChangedFor(nameof(NameTag))]
+    private string? _deviceCode;
+
+    /// <summary>Cihaz kodunun kısa, ayırt edici etiketi ("#5543" ya da çakışmada "T#5543"); ChatService doldurur.</summary>
+    [ObservableProperty]
+    [property: JsonIgnore]
+    [NotifyPropertyChangedFor(nameof(NameTag))]
+    private string? _deviceSuffix;
+
+    /// <summary>
+    /// Sohbet listesinde, sohbet başlığında ve bilgi panelinde gösterilen ad: "elaa#5543"; aynı numaralı başka bir cihaz
+    /// varsa harf eklenir ve çizgiyle ayrılır ("elaa-T#5543"). Cihaz kodu bilinmiyorsa yalnızca ad.
+    /// </summary>
+    [JsonIgnore]
+    public string NameTag => DeviceSuffix switch
+    {
+        null => Name,
+        ['#', ..] suffix => Name + suffix,
+        var suffix => Name + "-" + suffix,
+    };
+
+    /// <summary>
+    /// "Ağdaki kişiler" listesinde adın altındaki satır: cihaz kodu. Durum zaten bölüm başlığında ve noktada görünür.
+    /// Cihaz kodu göndermeyen eski sürümlerde durum metni gösterilir.
+    /// </summary>
+    [JsonIgnore] public string NetworkSubtitle => DeviceCode ?? PresenceText;
+
+    /// <summary>Profil resmi (Base64 JPEG); yoksa null.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AvatarImage))]
+    private string? _avatar;
+
+    [JsonIgnore] public System.Windows.Media.ImageSource? AvatarImage => NetChat.Core.ProfilePicture.Decode(Avatar);
+
+    /// <summary>Profil resminin parmak izi (duyurudakiyle karşılaştırılır).</summary>
+    [JsonIgnore] public string? AvatarHash => _avatarHash ??= NetChat.Core.ProfilePicture.Hash(Avatar);
+    private string? _avatarHash;
+
+    partial void OnAvatarChanged(string? value) => _avatarHash = null;
+
     /// <summary>Ağda erişilebilir mi (mesaj teslimi için). Durum gösterimi için <see cref="Presence"/> kullanılır.</summary>
     [ObservableProperty]
     [property: JsonIgnore]
@@ -151,14 +194,23 @@ public partial class Peer : ObservableObject
         OnPropertyChanged(nameof(ShowOnlineDot));
         OnPropertyChanged(nameof(ShowIdleDot));
         OnPropertyChanged(nameof(PresenceText));
+        OnPropertyChanged(nameof(NetworkSubtitle));
         OnPropertyChanged(nameof(PresenceGroupOrder));
         OnPropertyChanged(nameof(PresenceGroup));
     }
 
     /// <summary>Gün değiştiğinde "dün" gibi göreli metinlerin yenilenmesi için.</summary>
-    public void RefreshPresenceText() => OnPropertyChanged(nameof(PresenceText));
+    public void RefreshPresenceText()
+    {
+        OnPropertyChanged(nameof(PresenceText));
+        OnPropertyChanged(nameof(NetworkSubtitle));
+    }
 
-    partial void OnNameChanged(string value) => OnPropertyChanged(nameof(Initials));
+    partial void OnNameChanged(string value)
+    {
+        OnPropertyChanged(nameof(Initials));
+        OnPropertyChanged(nameof(NameTag));
+    }
     partial void OnIsOnlineChanged(bool value) => RaisePresence();
     partial void OnIsActiveChanged(bool value) => RaisePresence();
     partial void OnSharesStatusChanged(bool value) => RaisePresence();
@@ -488,7 +540,9 @@ public partial class Conversation : ObservableObject
     public List<GroupState> GroupHistory { get; set; } = [];
 
     [ObservableProperty] private GroupState? _group;
-    [ObservableProperty] private string _title = "";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DisplayTitle))]
+    private string _title = "";
     [ObservableProperty] private int _unreadCount;
     [ObservableProperty] private DateTimeOffset _lastActivity;
     [ObservableProperty] private bool _isPinned;
@@ -498,7 +552,22 @@ public partial class Conversation : ObservableObject
 
     [ObservableProperty]
     [property: JsonIgnore]
+    [NotifyPropertyChangedFor(nameof(DisplayTitle))]
     private Peer? _peer;
+
+    /// <summary>Gösterilen başlık: bire bir sohbette kişinin cihaz etiketli adı ("elaa#5543"), grupta grup adı.</summary>
+    [JsonIgnore] public string DisplayTitle => !IsGroup && Peer is { } p ? p.NameTag : Title;
+
+    partial void OnPeerChanged(Peer? oldValue, Peer? newValue)
+    {
+        if (oldValue != null) oldValue.PropertyChanged -= OnPeerPropertyChanged;
+        if (newValue != null) newValue.PropertyChanged += OnPeerPropertyChanged;
+    }
+
+    private void OnPeerPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(Models.Peer.NameTag)) OnPropertyChanged(nameof(DisplayTitle));
+    }
 
     [ObservableProperty]
     [property: JsonIgnore]
@@ -576,7 +645,9 @@ public partial class Conversation : ObservableObject
         var today = DateTime.Today;
         if (day == today) return "Bugün";
         if (day == today.AddDays(-1)) return "Dün";
-        if ((today - day).TotalDays < 7) return day.ToString("dddd");
-        return day.ToString("d MMMM yyyy");
+        // Arayüz Türkçe: gün ve ay adları sistem dilinden bağımsız olarak Türkçe yazılır.
+        var turkish = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
+        if ((today - day).TotalDays < 7) return day.ToString("dddd", turkish);
+        return day.ToString("d MMMM yyyy", turkish);
     }
 }

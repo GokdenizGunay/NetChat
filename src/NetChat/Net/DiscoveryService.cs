@@ -33,13 +33,17 @@ public sealed class Beacon
     public string? Ga { get; set; }
     /// <summary>Ga listesindeki kişiler için etiketler (Hx gibi; kimlikler açıkça yazılmaz).</summary>
     public List<string>? Gx { get; set; }
+    /// <summary>Cihaz kodu (ör. "spacecookie#2863"). Eski sürümler göndermez.</summary>
+    public string? Dc { get; set; }
+    /// <summary>Profil resminin parmak izi; resim yoksa null.</summary>
+    public string? Av { get; set; }
 }
 
 public sealed record LocalPresence(string State, long? LastActive, IReadOnlyCollection<string> HideFrom,
-    string? GroupMode = null, IReadOnlyCollection<string>? GroupTags = null);
+    string? GroupMode = null, IReadOnlyCollection<string>? GroupTags = null, string? AvatarHash = null);
 
 public sealed record DiscoveredPeer(string Id, string Name, IPAddress Address, int Port, string PublicKey,
-    string? State, long? LastActive, bool HidesFromMe, bool CanAddMe);
+    string? State, long? LastActive, bool HidesFromMe, bool CanAddMe, string? DeviceCode = null, string? AvatarHash = null);
 
 /// <summary>
 /// UDP yayını (broadcast) ile eş keşfi. Her birkaç saniyede bir duyuru yapar; gelen duyuruların
@@ -146,6 +150,8 @@ public sealed class DiscoveryService : IDisposable
             Hx = presence.HideFrom.Count > 0 ? [.. presence.HideFrom] : null,
             Ga = presence.GroupMode,
             Gx = presence.GroupTags is { Count: > 0 } tags ? [.. tags] : null,
+            Dc = DeviceCode.Current,
+            Av = presence.AvatarHash,
         };
         var data = JsonSerializer.SerializeToUtf8Bytes(beacon, Wire.Json);
 
@@ -265,8 +271,10 @@ public sealed class DiscoveryService : IDisposable
             "except" => !listed,
             _ => true,
         };
+        var deviceCode = beacon.Dc is { Length: > 0 and <= 40 } dc ? dc : null;
+        var avatarHash = beacon.Av is { Length: > 0 and <= 32 } av ? av : null;
         PeerSeen?.Invoke(new DiscoveredPeer(beacon.Id, name, result.RemoteEndPoint.Address, beacon.Port, beacon.Pub,
-            beacon.St, beacon.La, hidesFromMe, canAddMe));
+            beacon.St, beacon.La, hidesFromMe, canAddMe, deviceCode, avatarHash));
 
         // Probe'a yayınla yanıt ver ki yeni katılan (aynı makinedeki diğer örnekler dahil) beklemeden bizi görsün.
         if (beacon.T == "probe" && _announcing) _ = SendAsync("hello");

@@ -44,7 +44,7 @@ public partial class SettingsView : UserControl
 
     private void OnSettingsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(AppSettings.DisplayName)) LoadProfile();
+        if (e.PropertyName is nameof(AppSettings.DisplayName) or nameof(AppSettings.Avatar)) LoadProfile();
     }
 
     private void OnNetworkChanged(NetworkStatus status) => Dispatcher.BeginInvoke(() => ShowNetwork(status));
@@ -59,20 +59,45 @@ public partial class SettingsView : UserControl
 
     public void FocusProfile()
     {
-        Dispatcher.BeginInvoke(() =>
-        {
-            ProfileCard.BringIntoView();
-            NameBox.Focus();
-            NameBox.SelectAll();
-        }, System.Windows.Threading.DispatcherPriority.Input);
+        Dispatcher.BeginInvoke(() => ProfileCard.BringIntoView(), System.Windows.Threading.DispatcherPriority.Input);
     }
 
     private void LoadProfile()
     {
-        NameBox.Text = _settings.DisplayName;
+        ProfileName.Text = _settings.DisplayName;
+        DeviceCodeText.Text = DeviceCode.Label(DeviceCode.Current, _settings.DisplayName);
         ProfileAvatar.Text = Conversation.MakeInitials(_settings.DisplayName);
         ProfileAvatar.Key = App.Identity.Id;
-        SaveNameButton.IsEnabled = false;
+        ProfileAvatar.Image = ProfilePicture.Decode(_settings.Avatar);
+        RemoveAvatarButton.Visibility = _settings.Avatar != null ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // ------------------------------------------------------------------ Profil resmi
+
+    private void OnPickAvatarClicked(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Profil resmi seçin",
+            Filter = "Resimler|*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.webp;*.tif;*.tiff|Tüm dosyalar|*.*",
+        };
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
+        try
+        {
+            _settings.Avatar = ProfilePicture.FromFile(dialog.FileName);
+            Anim.PopIn(ProfileAvatar);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Profil resmi okunamadı", ex);
+            App.Chat.ShowInfo("Bu dosya resim olarak açılamadı.");
+        }
+    }
+
+    private void OnRemoveAvatarClicked(object sender, RoutedEventArgs e)
+    {
+        _settings.Avatar = null;
+        Anim.PopIn(ProfileAvatar);
     }
 
     // ------------------------------------------------------------------ Mesaj geçmişi
@@ -169,30 +194,6 @@ public partial class SettingsView : UserControl
         return d as ShellView;
     }
 
-    private void OnNameChanged(object sender, TextChangedEventArgs e)
-    {
-        var error = WelcomeView.ValidateName(NameBox.Text);
-        var changed = NameBox.Text.Trim() != _settings.DisplayName;
-        SaveNameButton.IsEnabled = changed && error == null;
-        NameError.Text = error ?? "";
-        if (error != null && changed && NameError.Visibility != Visibility.Visible) Anim.FadeIn(NameError, fromY: -4, ms: 160);
-        else if ((error == null || !changed) && NameError.Visibility == Visibility.Visible) Anim.FadeOut(NameError, toY: -4, ms: 120);
-    }
-
-    private void OnNameKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter && SaveNameButton.IsEnabled) SaveName();
-    }
-
-    private void OnSaveNameClicked(object sender, RoutedEventArgs e) => SaveName();
-
-    private void SaveName()
-    {
-        if (WelcomeView.ValidateName(NameBox.Text) != null) return;
-        _settings.DisplayName = NameBox.Text.Trim();
-        Anim.PopIn(ProfileAvatar);
-    }
-
     private void OnThemeChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!IsInitialized || ThemeBox.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
@@ -224,28 +225,6 @@ public partial class SettingsView : UserControl
         await App.Chat.RescanAsync();
         await Task.Delay(1200);
         ShowNetwork(App.Network.Current);
-    }
-
-    private void OnOpenFolderClicked(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            Directory.CreateDirectory(_settings.EffectiveDownloadFolder);
-            Process.Start(new ProcessStartInfo(_settings.EffectiveDownloadFolder) { UseShellExecute = true });
-        }
-        catch
-        {
-        }
-    }
-
-    private void OnChangeFolderClicked(object sender, RoutedEventArgs e)
-    {
-        var dialog = new OpenFolderDialog
-        {
-            Title = "İndirme klasörünü seçin",
-            InitialDirectory = Directory.Exists(_settings.EffectiveDownloadFolder) ? _settings.EffectiveDownloadFolder : null,
-        };
-        if (dialog.ShowDialog(Window.GetWindow(this)) == true) _settings.DownloadFolder = dialog.FolderName;
     }
 
     private void OnExitClicked(object sender, RoutedEventArgs e) => ((App)Application.Current).ExitApplication();

@@ -88,6 +88,18 @@ public partial class WelcomeView : UserControl
         else if (block.Visibility != Visibility.Visible) Anim.FadeIn(block, fromY: -4, ms: 180);
     }
 
+    private const string HashWarning = "Profil adında # kullanılamaz.";
+
+    /// <summary>
+    /// Ad kutusuna # yazıldığı anda uyarı gösterir, silinince kaldırır (# cihaz etiketinde kullanılır: "elaa#5543").
+    /// Diğer kurallar yalnızca "Oluştur"a basınca denetlenir.
+    /// </summary>
+    private static void WarnOnHash(System.Windows.Controls.TextBox box, TextBlock error)
+    {
+        if (box.Text.Contains('#')) SetError(error, HashWarning);
+        else if (error.Text == HashWarning) SetError(error, null);
+    }
+
     /// <summary>Kullanıcı adı kuralları: 2-32 karakter; harf, rakam, boşluk ve . _ - kullanılabilir.</summary>
     public static string? ValidateName(string name)
     {
@@ -95,6 +107,7 @@ public partial class WelcomeView : UserControl
         if (trimmed.Length == 0) return "Bir ad girin.";
         if (trimmed.Length < 2) return "Ad en az 2 karakter olmalı.";
         if (trimmed.Length > 32) return "Ad en fazla 32 karakter olabilir.";
+        if (trimmed.Contains('#')) return HashWarning;
         if (!char.IsLetterOrDigit(trimmed[0])) return "Ad bir harf veya rakamla başlamalı.";
         if (trimmed.Any(c => !(char.IsLetterOrDigit(c) || c is ' ' or '.' or '_' or '-')))
             return "Yalnızca harf, rakam, boşluk ve . _ - karakterleri kullanılabilir.";
@@ -103,6 +116,10 @@ public partial class WelcomeView : UserControl
     }
 
     private void OnBackClicked(object sender, RoutedEventArgs e) => ShowPanel(HomePanel);
+
+    private void OnNewNameChanged(object sender, TextChangedEventArgs e) => WarnOnHash(NewName, NewError);
+
+    private void OnRenameChanged(object sender, TextChangedEventArgs e) => WarnOnHash(RenameBox, RenameError);
 
     // ------------------------------------------------------------------ Giriş
 

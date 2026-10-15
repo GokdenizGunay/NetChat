@@ -110,6 +110,7 @@ public sealed partial class ChatService : ObservableObject, IDisposable
             if (peer.IsBlocked) _blockedIds[peer.Id] = 0;
             if (peer.IpAddress != null && peer.Port > 0) _endpoints[peer.Id] = new IPEndPoint(peer.IpAddress, peer.Port);
         }
+        RefreshDeviceSuffixes();
         foreach (var conv in data.Conversations)
         {
             if (!conv.IsGroup)
@@ -200,6 +201,8 @@ public sealed partial class ChatService : ObservableObject, IDisposable
             case nameof(AppSettings.GroupAddMode):
             case nameof(AppSettings.GroupAddOnly):
             case nameof(AppSettings.GroupAddExcept):
+            case nameof(AppSettings.Avatar):
+                // Profil resmi değişince yeni parmak izi duyurulur; görenler yeni resmi kendileri ister.
                 _ = _discovery.AnnounceAsync();
                 break;
             case nameof(AppSettings.KeepMessageHistory):
@@ -234,7 +237,7 @@ public sealed partial class ChatService : ObservableObject, IDisposable
             _ => ((string?)null, (List<string>?)null),
         };
         var groupTags = groupList?.Select(id => DiscoveryService.GroupTag(MyId, id)).ToList();
-        return new LocalPresence(state, lastActive, hideFrom, groupMode, groupTags);
+        return new LocalPresence(state, lastActive, hideFrom, groupMode, groupTags, ProfilePicture.Hash(_settings.Avatar));
     }
 
     /// <summary>Gizlilik ayarına göre bu kişi beni gruplara ekleyebilir mi? (Engellediklerim hiçbir zaman ekleyemez.)</summary>
@@ -390,6 +393,17 @@ public sealed partial class ChatService : ObservableObject, IDisposable
         peer.SeenThisSession = true;
         peer.BlocksMe = p.HidesFromMe;
         peer.AllowsGroupAdd = p.CanAddMe;
+        // Eski sürümler cihaz kodu ve profil resmi göndermez; onlar için hiçbir şey değişmez.
+        if (p.DeviceCode != null)
+        {
+            if (peer.DeviceCode != p.DeviceCode)
+            {
+                peer.DeviceCode = p.DeviceCode;
+                RefreshDeviceSuffixes();
+                MarkDirty();
+            }
+            SyncAvatar(peer, p.AvatarHash);
+        }
         // Engellenen ya da bizi engelleyen kişinin durum/son aktifliği güncellenmez.
         if (!peer.IsBlocked && !p.HidesFromMe) ApplyPresence(peer, p.State, p.LastActive);
         SetOnline(peer);
@@ -961,12 +975,65 @@ public sealed partial class ChatService : ObservableObject, IDisposable
                 case DeletePacket p: HandleDelete(peerId, p); break;
                 case GroupStatePacket p: HandleGroupState(peerId, p); break;
                 case ReactionPacket p: HandleReaction(peerId, p); break;
+                case AvatarRequestPacket: HandleAvatarRequest(peerId); break;
+                case AvatarPacket p: HandleAvatar(peerId, p); break;
             }
         }
         catch (Exception ex)
         {
             Log.Error($"Paket işlenemedi ({packet.GetType().Name})", ex);
         }
+    }
+
+    // ------------------------------------------------------------------ Cihaz etiketleri
+
+    /// <summary>
+    /// Ad etiketleri ("elaa#5543"): bilinen tüm cihaz kodları (bizimki dahil) arasında numara çakışırsa yetecek kadar
+    /// harf eklenir ("elaaT#5543").
+    /// </summary>
+    private void RefreshDeviceSuffixes()
+    {
+        var suffixes = DeviceCode.Suffixes(Peers.Select(p => p.DeviceCode).OfType<string>().Append(DeviceCode.Current));
+        foreach (var peer in Peers)
+            peer.DeviceSuffix = peer.DeviceCode is { } code && suffixes.TryGetValue(code, out var s) ? s : null;
+    }
+
+    // ------------------------------------------------------------------ Profil resimleri
+
+    /// <summary>Son istenen parmak izi ve zamanı: aynı resim her duyuruda yeniden istenmesin.</summary>
+    private readonly Dictionary<string, (string Hash, DateTime At)> _avatarRequests = [];
+
+    private void SyncAvatar(Peer peer, string? hash)
+    {
+        if (hash == peer.AvatarHash) return;
+        if (hash == null)
+        {
+            peer.Avatar = null;
+            MarkDirty();
+            return;
+        }
+        // Bizi engelleyen ya da bizim engellediğimiz kişiden resim istenmez.
+        if (peer.BlocksMe || peer.IsBlocked) return;
+        if (_avatarRequests.TryGetValue(peer.Id, out var last) && last.Hash == hash && DateTime.UtcNow - last.At < TimeSpan.FromSeconds(30)) return;
+        _avatarRequests[peer.Id] = (hash, DateTime.UtcNow);
+        _ = _connections.SendAsync(peer.Id, new AvatarRequestPacket());
+    }
+
+    private void HandleAvatarRequest(string peerId)
+    {
+        // Engellenen kişi resmimizi alamaz.
+        if (FindPeer(peerId)?.IsBlocked == true) return;
+        _ = _connections.SendAsync(peerId, new AvatarPacket { Data = _settings.Avatar });
+    }
+
+    private void HandleAvatar(string peerId, AvatarPacket p)
+    {
+        if (FindPeer(peerId) is not { } peer) return;
+        _avatarRequests.Remove(peerId);
+        var data = p.Data is { Length: > 0 } d && ProfilePicture.IsValid(d) ? d : null;
+        if (data == peer.Avatar) return;
+        peer.Avatar = data;
+        MarkDirty();
     }
 
     private Conversation? ResolveConversation(string peerId, Guid? groupId)
@@ -1170,7 +1237,7 @@ public sealed partial class ChatService : ObservableObject, IDisposable
         if (p.GroupId == null && _blockedIds.ContainsKey(peerId)) return;
         try
         {
-            var folder = _settings.EffectiveDownloadFolder;
+            var folder = AppPaths.FilesDir;
             Directory.CreateDirectory(folder);
             var file = new IncomingFile
             {
@@ -1240,8 +1307,11 @@ public sealed partial class ChatService : ObservableObject, IDisposable
             if (!string.Equals(hash, done.Sha256, StringComparison.OrdinalIgnoreCase))
                 throw new CryptographicException("Dosya bütünlük doğrulaması başarısız");
 
-            finalPath = UniquePath(Path.GetDirectoryName(file.TempPath)!, file.FileName);
-            File.Move(file.TempPath, finalPath);
+            // Her dosya kendi klasöründe: aynı adlı dosyalar çakışmaz, "Kaydet..." özgün adı önerir.
+            var folder = Path.Combine(AppPaths.FilesDir, file.MessageId.ToString("N"));
+            Directory.CreateDirectory(folder);
+            finalPath = Path.Combine(folder, file.FileName);
+            File.Move(file.TempPath, finalPath, overwrite: true);
         }
         catch (Exception ex)
         {
@@ -1281,15 +1351,6 @@ public sealed partial class ChatService : ObservableObject, IDisposable
         if (name.Length == 0) name = "dosya";
         if (name.Length > 150) name = name[..100] + Path.GetExtension(name);
         return name;
-    }
-
-    private static string UniquePath(string folder, string fileName)
-    {
-        var path = Path.Combine(folder, fileName);
-        var stem = Path.GetFileNameWithoutExtension(fileName);
-        var ext = Path.GetExtension(fileName);
-        for (int i = 1; File.Exists(path); i++) path = Path.Combine(folder, $"{stem} ({i}){ext}");
-        return path;
     }
 
     // ------------------------------------------------------------------ Kapatma
