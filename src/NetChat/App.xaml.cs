@@ -133,8 +133,6 @@ public partial class App : Application
 
     public static bool IsSignedIn => Session != null && Chat != null;
 
-    private DispatcherTimer? _networkLossTimer;
-
     /// <summary>
     /// Profil açıldıktan sonra çağrılır: ayarları uygular, mesajlaşma servisini kurar ve ağ ön kontrolünü yapar.
     /// Sonuç <see cref="PreflightResult.Ok"/> değilse giriş ekranı kullanıcıyı yönlendirir.
@@ -164,6 +162,7 @@ public partial class App : Application
     /// <summary>Ön kontrol tamam: ağa katıl ve ana ekranı göster.</summary>
     public void CompleteSession()
     {
+        if (Session is { } opened) ProfileCatalog.RememberLast(opened.FilePath);
         if (Chat == null) return;
         Session?.Activate();
         Chat.JoinNetwork();
@@ -184,7 +183,6 @@ public partial class App : Application
     /// <summary>Oturumu kapatır ve giriş ekranına döner; <paramref name="reason"/> verilirse açıklama gösterilir.</summary>
     public void EndSession(string? reason)
     {
-        _networkLossTimer?.Stop();
         var chat = Chat;
         var session = Session;
         if (chat == null && session == null) return;
@@ -245,26 +243,8 @@ public partial class App : Application
 
     private void OnNetworkChanged(NetChat.Net.NetworkStatus status)
     {
-        if (!IsSignedIn) return;
-        if (status.IsConnected)
-        {
-            _networkLossTimer?.Stop();
-            // Ağa yeniden bağlanıldığında diğer cihazları beklemeden bul.
-            _ = Chat.RescanAsync();
-            return;
-        }
-        // Kısa kesintiler (ör. DHCP yenilemesi) oturumu kapatmasın.
-        _networkLossTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
-        _networkLossTimer.Tick -= OnNetworkLossTimeout;
-        _networkLossTimer.Tick += OnNetworkLossTimeout;
-        _networkLossTimer.Start();
-    }
-
-    private void OnNetworkLossTimeout(object? sender, EventArgs e)
-    {
-        _networkLossTimer?.Stop();
-        if (IsSignedIn && !Network.Current.IsConnected)
-            EndSession("Ağ bağlantısı kesildi. Yeniden bağlandığınızda tekrar giriş yapabilirsiniz.");
+        // Ağa yeniden bağlanıldığında diğer cihazları beklemeden bul. Ağ yokken de oturum açık kalır.
+        if (IsSignedIn && status.IsConnected) _ = Chat.RescanAsync();
     }
 
     private void OnChatPropertyChanged(object? sender, PropertyChangedEventArgs e)

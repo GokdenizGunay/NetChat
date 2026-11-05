@@ -197,8 +197,8 @@ public partial class ChatView : UserControl
         HeaderAvatar.Key = conv.ColorKey;
         HeaderAvatar.IsGroup = conv.IsGroup;
         HeaderAvatar.SetBinding(Avatar.ImageProperty, new Binding("Peer.AvatarImage") { Source = conv });
-        // Başlığın sağında karşı tarafın cihaz kodu (profil adı olmadan); grupta ve kodu bilinmeyen kişide gizli.
-        HeaderDevice.SetBinding(System.Windows.Controls.TextBlock.TextProperty, new Binding("Peer.DeviceCode") { Source = conv });
+        // Başlığın sağında karşı tarafın cihaz kodu ve cihaz adı; grupta ve kodu bilinmeyen kişide gizli.
+        HeaderDevice.SetBinding(System.Windows.Controls.TextBlock.TextProperty, new Binding("Peer.DeviceLabel") { Source = conv });
         HeaderDevice.SetBinding(VisibilityProperty, new Binding("Peer.DeviceCode") { Source = conv, Converter = (IValueConverter)FindResource("NullToVis"), FallbackValue = Visibility.Collapsed });
         HeaderAvatar.SetBinding(Avatar.IsOnlineProperty, new Binding("Peer.ShowOnlineDot") { Source = conv, FallbackValue = false });
         HeaderAvatar.SetBinding(Avatar.IsIdleProperty, new Binding("Peer.ShowIdleDot") { Source = conv, FallbackValue = false });
@@ -927,7 +927,10 @@ public partial class ChatView : UserControl
         InfoAvatar.IsGroup = conv.IsGroup;
         InfoAvatar.SetBinding(Avatar.ImageProperty, new Binding("Peer.AvatarImage") { Source = conv });
         InfoName.Text = conv.Title;
-        var device = conv.IsGroup ? null : conv.Peer?.DeviceCode;
+        var device = conv.IsGroup ? null : conv.Peer?.PrettyDeviceCode;
+        var deviceName = conv.IsGroup ? null : conv.Peer?.DeviceName;
+        InfoDeviceName.Text = deviceName ?? "";
+        InfoDeviceBlock.Visibility = deviceName != null ? Visibility.Visible : Visibility.Collapsed;
         // Bire bir sohbette ad, cihaz etiketiyle gösterilir ("elaa#5543").
         InfoName.Text = conv.DisplayTitle;
         InfoDevice.Text = device ?? "";
@@ -1022,7 +1025,7 @@ public partial class ChatView : UserControl
     /// <summary>Başlıktaki cihaz koduna tıklanınca: kodun ne olduğunu kısaca anlatır.</summary>
     private async void OnHeaderDeviceClicked(object sender, MouseButtonEventArgs e)
     {
-        if (_vm?.Conversation.Peer is not { DeviceCode: { } code } peer || FindShell() is not { } shell) return;
+        if (_vm?.Conversation.Peer is not { PrettyDeviceCode: { } code } peer || FindShell() is not { } shell) return;
         e.Handled = true;
         var text = new System.Windows.Controls.TextBlock
         {

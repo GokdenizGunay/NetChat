@@ -6,12 +6,13 @@ Yerel ağdaki diğer cihazlarla sunucusuz, şifreli mesajlaşma. Windows 10 ve W
 
 - **Sunucu gerekmez:** Aynı ağdaki NetChat kullanıcıları otomatik olarak bulunur ve "Ağdaki kişiler" listesinde görünür.
 - **Şifreli profiller:** Her profil, şifreyle korunan tek bir `.nprofile` dosyasıdır. Bilgisayarda ya da seçtiğiniz bir klasörde (ör. USB bellek) saklanabilir ve başka bir bilgisayarda açılabilir.
-- **Kilit (Ctrl+L):** Oturumu kapatıp giriş ekranına döner.
+- **Kilit (Ctrl+L):** Oturumu kapatıp giriş ekranına döner. Son kullanılan profil hatırlanır; yalnızca şifreyle hızlıca geri dönülür.
 - **Sohbet:** Bire bir ve grup sohbetleri, yanıtlama, ifade bırakma, gruplarda @etiketleme, renkli emoji, okundu bilgisi.
 - **Dosya gönderme:** Ekle düğmesiyle ya da sohbete sürükleyip bırakarak. Alınan dosyalar sağ tık › *Kaydet...* ile istenen yere kaydedilir.
-- **Profil resmi ve cihaz kodu:** Profil resmi eklenebilir. Her bilgisayarın değişmeyen bir cihaz kodu vardır (ör. `megacircuit#5543`); kişiler sohbetlerde `ad#5543` biçiminde görünür.
+- **Profil resmi ve cihaz kodu:** Profil resmi eklenebilir. Her bilgisayarın değişmeyen bir cihaz kodu vardır (ör. `Megacircuit#5543`); kişiler sohbetlerde `ad#5543` biçiminde görünür.
 - **Gruplar:** Yöneticiler, susturma, üye ekleme/çıkarma, "yalnızca yöneticiler yazabilir" gibi ayarlar. Grup bilgileri yönetici çevrimdışıyken de üyeler arasında güncel kalır.
 - **Çevrimdışı kişiler:** Çevrimdışı birine gönderilen mesajlar, o kişi ağa bağlandığında iletilir.
+- **UDP kanalı:** Ayarlar'dan özel bir keşif portu seçilebilir ve kanallar adlarıyla kaydedilebilir. Yalnızca aynı kanaldakiler birbirini görür.
 - **Gizlilik:** Çevrimiçi durumu, son aktiflik, okundu bilgisi, sizi gruplara kimlerin ekleyebileceği ve mesaj geçmişinin saklanması ayarlanabilir. Engelleme ve sessize alma desteklenir.
 - **Otomatik güncelleme:** Uygulama açılışta yeni bir sürüm olup olmadığını denetler; varsa giriş ekranında sorar, indirip kendini günceller ve yeniden başlar.
 - **Arka planda çalışma:** Pencere kapatılınca uygulama bildirim alanında çalışmaya devam eder; yeni mesajlarda Windows bildirimi gösterilir.

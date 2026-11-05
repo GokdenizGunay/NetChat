@@ -35,6 +35,8 @@ public sealed class Beacon
     public List<string>? Gx { get; set; }
     /// <summary>Cihaz kodu (ör. "spacecookie#2863"). Eski sürümler göndermez.</summary>
     public string? Dc { get; set; }
+    /// <summary>Bilgisayarın adı. Eski sürümler göndermez.</summary>
+    public string? Dn { get; set; }
     /// <summary>Profil resminin parmak izi; resim yoksa null.</summary>
     public string? Av { get; set; }
 }
@@ -43,7 +45,7 @@ public sealed record LocalPresence(string State, long? LastActive, IReadOnlyColl
     string? GroupMode = null, IReadOnlyCollection<string>? GroupTags = null, string? AvatarHash = null);
 
 public sealed record DiscoveredPeer(string Id, string Name, IPAddress Address, int Port, string PublicKey,
-    string? State, long? LastActive, bool HidesFromMe, bool CanAddMe, string? DeviceCode = null, string? AvatarHash = null);
+    string? State, long? LastActive, bool HidesFromMe, bool CanAddMe, string? DeviceCode = null, string? AvatarHash = null, string? DeviceName = null);
 
 /// <summary>
 /// UDP yayını (broadcast) ile eş keşfi. Her birkaç saniyede bir duyuru yapar; gelen duyuruların
@@ -54,7 +56,9 @@ public sealed record DiscoveredPeer(string Id, string Name, IPAddress Address, i
 /// </summary>
 public sealed class DiscoveryService : IDisposable
 {
-    public const int Port = 45454;
+    /// <summary>Yayın ve dinlemenin kullandığı UDP portu (kanal).</summary>
+    public int Port { get; private set; }
+
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(4);
 
     private readonly Identity _identity;
@@ -73,8 +77,9 @@ public sealed class DiscoveryService : IDisposable
     /// <summary>Aynı profil ağda daha önce açılmış başka bir oturumda çalışıyor (bu oturum kapanmalı).</summary>
     public event Action? DuplicateSession;
 
-    public DiscoveryService(Identity identity, Func<string> getName, Func<int> getTcpPort, Func<LocalPresence> getPresence)
+    public DiscoveryService(Identity identity, int port, Func<string> getName, Func<int> getTcpPort, Func<LocalPresence> getPresence)
     {
+        Port = port;
         _identity = identity;
         _getName = getName;
         _getTcpPort = getTcpPort;
@@ -92,13 +97,43 @@ public sealed class DiscoveryService : IDisposable
     /// <summary>Dinlemeye başlar ve ağdakilerden hemen yanıt ister; kendini henüz duyurmaz.</summary>
     public void StartListening()
     {
-        var udp = new UdpClient(AddressFamily.InterNetwork);
-        udp.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-        udp.EnableBroadcast = true;
-        udp.Client.Bind(new IPEndPoint(IPAddress.Any, Port));
+        var udp = OpenSocket(Port);
         _udp = udp;
         _ = ReceiveLoopAsync(udp, _cts.Token);
         _ = SendAsync("probe");
+    }
+
+    private static UdpClient OpenSocket(int port)
+    {
+        var udp = new UdpClient(AddressFamily.InterNetwork);
+        try
+        {
+            udp.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            udp.EnableBroadcast = true;
+            udp.Client.Bind(new IPEndPoint(IPAddress.Any, port));
+            return udp;
+        }
+        catch
+        {
+            udp.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Kanalı değiştirir: yeni port açılır (açılamazsa <see cref="SocketException"/>, eski kanal aynen sürer), eski
+    /// kanala "bye" yayınlanır ve artık yalnızca yeni porttan yayın yapılıp dinlenir. Yeni kanala duyuruyu çağıran yapar.
+    /// </summary>
+    public async Task SwitchPortAsync(int port)
+    {
+        if (port == Port) return;
+        var fresh = OpenSocket(port);
+        if (_announcing) await SendAsync("bye");
+        var old = _udp;
+        _udp = fresh;
+        Port = port;
+        old?.Dispose();
+        _ = ReceiveLoopAsync(fresh, _cts.Token);
     }
 
     /// <summary>Ağa katılır: periyodik duyurular başlar.</summary>
@@ -151,6 +186,7 @@ public sealed class DiscoveryService : IDisposable
             Ga = presence.GroupMode,
             Gx = presence.GroupTags is { Count: > 0 } tags ? [.. tags] : null,
             Dc = DeviceCode.Current,
+            Dn = DeviceCode.DeviceName,
             Av = presence.AvatarHash,
         };
         var data = JsonSerializer.SerializeToUtf8Bytes(beacon, Wire.Json);
@@ -169,7 +205,7 @@ public sealed class DiscoveryService : IDisposable
     }
 
     /// <summary>Genel yayın adresi + her etkin arayüzün alt ağ yayın adresi.</summary>
-    private static List<IPEndPoint> GetBroadcastTargets()
+    private List<IPEndPoint> GetBroadcastTargets()
     {
         var list = new List<IPEndPoint> { new(IPAddress.Broadcast, Port) };
         try
@@ -273,8 +309,9 @@ public sealed class DiscoveryService : IDisposable
         };
         var deviceCode = beacon.Dc is { Length: > 0 and <= 40 } dc ? dc : null;
         var avatarHash = beacon.Av is { Length: > 0 and <= 32 } av ? av : null;
+        var deviceName = beacon.Dn is { Length: > 0 and <= 64 } dn ? dn : null;
         PeerSeen?.Invoke(new DiscoveredPeer(beacon.Id, name, result.RemoteEndPoint.Address, beacon.Port, beacon.Pub,
-            beacon.St, beacon.La, hidesFromMe, canAddMe, deviceCode, avatarHash));
+            beacon.St, beacon.La, hidesFromMe, canAddMe, deviceCode, avatarHash, deviceName));
 
         // Probe'a yayınla yanıt ver ki yeni katılan (aynı makinedeki diğer örnekler dahil) beklemeden bizi görsün.
         if (beacon.T == "probe" && _announcing) _ = SendAsync("hello");

@@ -79,6 +79,7 @@ public partial class ShellView : UserControl
         UpdateEmptyStates();
         UpdateRailBadge();
         UpdateListTitle();
+        UpdateChannelLink();
         App.Updates.AvailableChanged += OnUpdateAvailableChanged;
         UpdateSettingsBadge();
     }
@@ -88,6 +89,7 @@ public partial class ShellView : UserControl
     private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(App.Settings.DisplayName) or nameof(App.Settings.Avatar)) UpdateProfile();
+        if (e.PropertyName is nameof(App.Settings.UdpPort) or nameof(App.Settings.UdpChannels)) UpdateChannelLink();
         if (e.PropertyName == nameof(App.Settings.NotificationsMuted)) UpdateBell();
     }
 
@@ -291,6 +293,23 @@ public partial class ShellView : UserControl
     }
 
     private void OnShowPeopleClicked(object sender, RoutedEventArgs e) => PeopleTab.IsChecked = true;
+
+    /// <summary>Özel UDP kanalındayken tarama alanında kanal bağlantısı: kayıtlı adı, yoksa port numarası.</summary>
+    private void UpdateChannelLink()
+    {
+        var port = _chat.UdpPort;
+        var isCustom = port != NetChat.Core.AppSettings.DefaultUdpPort;
+        ChannelLinkBlock.Visibility = isCustom ? Visibility.Visible : Visibility.Collapsed;
+        if (!isCustom) return;
+        var channel = App.Settings.UdpChannels.FirstOrDefault(c => c.Port == port);
+        ChannelLinkText.Text = $"Kanal: {channel?.Name ?? port.ToString()}";
+    }
+
+    private void OnChannelLinkClicked(object sender, RoutedEventArgs e)
+    {
+        SettingsTab.IsChecked = true;
+        Settings.FocusUdpPort();
+    }
 
     private async void OnRescanClicked(object sender, RoutedEventArgs e)
     {

@@ -37,8 +37,11 @@
 
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24,24,24,48" Width="380">
+                <!-- Son giriş varken: küçük uygulama adı + karşılama başlığı -->
+                <TextBlock x:Name="SmallTitle" Text="NetChat 26" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,0,0,4"
+                           Visibility="Collapsed" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                 <TextBlock x:Name="TitleText" Text="NetChat 26" FontSize="28" FontWeight="SemiBold" HorizontalAlignment="Center"
-                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                           TextAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
                 <TextBlock x:Name="SubtitleText" Text="Yerel ağınızdaki diğer cihazlar ile sohbet edin" FontSize="16" Margin="0,6,0,0"
                            HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
                            Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
@@ -47,7 +50,7 @@
                     <Grid Width="18" Height="18" VerticalAlignment="Center">
                         <ui:SymbolIcon x:Name="WifiIcon" Symbol="Wifi124" FontSize="17" Visibility="Collapsed" />
                         <ui:FontIcon x:Name="WiredIcon" Glyph="&#xE839;" FontFamily="{StaticResource IconFont}" FontSize="16" Visibility="Collapsed" />
-                        <ui:SymbolIcon x:Name="OfflineIcon" Symbol="GlobeProhibited24" FontSize="17" Visibility="Collapsed" />
+                        <ui:SymbolIcon x:Name="OfflineIcon" Symbol="GlobeProhibited20" FontSize="17" Visibility="Collapsed" />
                     </Grid>
                     <TextBlock x:Name="StatusText" Margin="6,0,0,0" FontSize="14" VerticalAlignment="Center"
                                Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
@@ -56,11 +59,22 @@
                 <Grid Margin="0,56,0,0" MinHeight="120">
                     <!-- 1. Başlangıç: iki seçenek yan yana -->
                     <UniformGrid x:Name="HomePanel" Columns="2" VerticalAlignment="Top" HorizontalAlignment="Center" Width="320">
-                        <ui:Button x:Name="LoginButton" Content="Giriş Yap" Appearance="Primary" Icon="{ui:SymbolIcon Person24}"
+                        <ui:Button x:Name="LoginButton" Content="Giriş Yap" Icon="{ui:SymbolIcon Person24}"
                                    HorizontalAlignment="Stretch" Margin="0,0,5,0" Padding="12,9" FontSize="14" Click="OnShowLoginClicked" />
                         <ui:Button x:Name="NewProfileButton" Content="Yeni Profil" Icon="{ui:SymbolIcon PersonAdd24}"
                                    HorizontalAlignment="Stretch" Margin="5,0,0,0" Padding="12,9" FontSize="14" Click="OnShowNewClicked" />
                     </UniformGrid>
+
+                    <!-- 1b. Son profille hızlı giriş -->
+                    <StackPanel x:Name="QuickPanel" Visibility="Collapsed" VerticalAlignment="Top" HorizontalAlignment="Center" Width="300">
+                        <ui:PasswordBox x:Name="QuickPassword" PlaceholderText="Şifre" KeyDown="OnQuickKeyDown" AutomationProperties.Name="Şifre" />
+                        <TextBlock x:Name="QuickError" Style="{StaticResource ErrorLine}" TextAlignment="Center" />
+                        <ui:Button x:Name="QuickSignInButton" Content="Giriş Yap" Appearance="Primary" HorizontalAlignment="Center"
+                                   Margin="0,14,0,0" Padding="28,9" FontSize="14" Click="OnQuickSignInClicked" />
+                        <TextBlock HorizontalAlignment="Center" Margin="0,14,0,0" FontSize="13">
+                            <Hyperlink Click="OnOtherProfileClicked" TextDecorations="Underline" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}">Başka Profil</Hyperlink>
+                        </TextBlock>
+                    </StackPanel>
 
                     <!-- 2. Giriş -->
                     <StackPanel x:Name="LoginPanel" Visibility="Collapsed" VerticalAlignment="Top">

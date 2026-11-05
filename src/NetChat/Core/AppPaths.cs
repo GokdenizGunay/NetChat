@@ -22,6 +22,9 @@ public static class AppPaths
     /// <summary>Varsayılan konumdaki (AppData) şifreli profil paketleri.</summary>
     public static string ProfilesDir => Path.Combine(DataDir, "UserProfiles");
 
+    /// <summary>Son giriş yapılan profilin dosya yolu (giriş ekranı için; başka veri içermez).</summary>
+    public static string LastProfileFile => Path.Combine(DataDir, "last-profile");
+
     /// <summary>
     /// Windows'un doğrudan dosyadan okuması gereken kaynaklar (ör. .nprofile simgesi). Uygulamaya gömülüdür,
     /// açılışta buraya çıkarılır. Kişisel veri içermez; tüm örnekler (--profile) için ortaktır.

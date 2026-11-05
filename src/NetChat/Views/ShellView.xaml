@@ -255,7 +255,7 @@
                         <Grid Width="16" Height="16" DockPanel.Dock="Left">
                             <ui:SymbolIcon x:Name="NetWifi" Symbol="Wifi124" FontSize="15" Visibility="Collapsed" />
                             <ui:FontIcon x:Name="NetWired" Glyph="&#xE839;" FontFamily="{StaticResource IconFont}" FontSize="14" Visibility="Collapsed" />
-                            <ui:SymbolIcon x:Name="NetOffline" Symbol="GlobeProhibited24" FontSize="15" Visibility="Collapsed"
+                            <ui:SymbolIcon x:Name="NetOffline" Symbol="GlobeProhibited20" FontSize="15" Visibility="Collapsed"
                                            Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
                         </Grid>
                         <TextBlock x:Name="NetText" Margin="8,0,0,0" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
@@ -322,6 +322,10 @@
                                    Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
                         <TextBlock TextAlignment="Center" TextWrapping="Wrap" FontSize="12.5" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                    Text="Aynı yerel ağda NetChat çalıştıran cihazlar otomatik olarak burada görünür." />
+                        <!-- Özel UDP kanalındayken: ayarlardaki port alanına götürür -->
+                        <TextBlock x:Name="ChannelLinkBlock" HorizontalAlignment="Center" Margin="0,14,0,0" FontSize="13" Visibility="Collapsed">
+                            <Hyperlink Click="OnChannelLinkClicked" TextDecorations="{x:Null}" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"><Run x:Name="ChannelLinkText" /></Hyperlink>
+                        </TextBlock>
                     </StackPanel>
                 </Grid>
             </DockPanel>

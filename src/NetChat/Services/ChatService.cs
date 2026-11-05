@@ -75,7 +75,8 @@ public sealed partial class ChatService : ObservableObject, IDisposable
         {
             ResolveEndpoint = id => _endpoints.TryGetValue(id, out var ep) ? ep : null,
         };
-        _discovery = new DiscoveryService(identity, () => _settings.DisplayName, () => _connections.Port, GetLocalPresence);
+        var udpPort = AppSettings.IsValidUdpPort(_settings.UdpPort) ? _settings.UdpPort : AppSettings.DefaultUdpPort;
+        _discovery = new DiscoveryService(identity, udpPort, () => _settings.DisplayName, () => _connections.Port, GetLocalPresence);
 
         _saveTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => SaveNow(), dispatcher);
         _saveTimer.Stop();
@@ -254,6 +255,39 @@ public sealed partial class ChatService : ObservableObject, IDisposable
     }
     public Task RescanAsync() => _discovery.ProbeAsync();
 
+    /// <summary>Keşif yayını ve dinlemenin kullandığı UDP portu.</summary>
+    public int UdpPort => _discovery.Port;
+
+    /// <summary>
+    /// UDP kanalını değiştirir. Eski kanaldaki kişilerle bağlantı kesilir ve çevrimdışı görünürler; yeni kanalda
+    /// görülenler çevrimiçi olur. Port açılamazsa false döner ve eski kanal sürer.
+    /// </summary>
+    public async Task<bool> ChangeUdpPortAsync(int port)
+    {
+        if (!AppSettings.IsValidUdpPort(port)) return false;
+        try
+        {
+            await _discovery.SwitchPortAsync(port);
+        }
+        catch (System.Net.Sockets.SocketException ex)
+        {
+            Log.Error($"UDP portu açılamadı: {port}", ex);
+            return false;
+        }
+        _settings.UdpPort = port;
+        foreach (var peer in Peers.Where(p => p.IsOnline).ToList())
+        {
+            MarkOffline(peer);
+            _connections.Disconnect(peer.Id);
+        }
+        // Ağdaki kişiler listesi kanala özeldir: eski kanalda görülenler listeden çıkar, tarama alanı görünür.
+        foreach (var peer in Peers) peer.SeenThisSession = false;
+        await _discovery.ProbeAsync();
+        await _discovery.AnnounceAsync();
+        Log.Info($"UDP kanalı değişti: {port}");
+        return true;
+    }
+
     public void ShowInfo(string text) => Info?.Invoke(text);
 
     private void Post(Action action) => _dispatcher.BeginInvoke(action, DispatcherPriority.Normal);
@@ -400,6 +434,11 @@ public sealed partial class ChatService : ObservableObject, IDisposable
             {
                 peer.DeviceCode = p.DeviceCode;
                 RefreshDeviceSuffixes();
+                MarkDirty();
+            }
+            if (p.DeviceName != null && peer.DeviceName != p.DeviceName)
+            {
+                peer.DeviceName = p.DeviceName;
                 MarkDirty();
             }
             SyncAvatar(peer, p.AvatarHash);

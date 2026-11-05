@@ -256,6 +256,37 @@ public sealed record ProfileEntry(string Path, string Name, string Id)
 /// <summary>Varsayılan konumdaki (AppData\NetChat\UserProfiles) profiller.</summary>
 public static class ProfileCatalog
 {
+    /// <summary>Son giriş yapılan profili hatırlar (yalnızca dosya yolu).</summary>
+    public static void RememberLast(string path)
+    {
+        try
+        {
+            File.WriteAllText(AppPaths.LastProfileFile, path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Error("Son profil kaydedilemedi", ex);
+        }
+    }
+
+    /// <summary>Son giriş yapılan profil; hiç giriş yapılmadıysa ya da dosyası artık yoksa/okunamıyorsa null.</summary>
+    public static ProfileEntry? Last()
+    {
+        try
+        {
+            if (!File.Exists(AppPaths.LastProfileFile)) return null;
+            var path = File.ReadAllText(AppPaths.LastProfileFile).Trim();
+            if (path.Length == 0 || !File.Exists(path)) return null;
+            var header = ProfileFile.ReadHeader(path);
+            return new ProfileEntry(path, header.Name, header.Id);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidProfileException)
+        {
+            Log.Info("Son profil okunamadı: " + ex.Message);
+            return null;
+        }
+    }
+
     public static List<ProfileEntry> List() =>
         ListIn(AppPaths.ProfilesDir).OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
 

@@ -53,8 +53,21 @@ public partial class Peer : ObservableObject
     /// <summary>Kişinin profilinin açık olduğu cihazın kodu (ör. "spacecookie#2863"); son duyurusuna göre.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NetworkSubtitle))]
+    [NotifyPropertyChangedFor(nameof(DeviceLabel))]
+    [NotifyPropertyChangedFor(nameof(PrettyDeviceCode))]
     [NotifyPropertyChangedFor(nameof(NameTag))]
     private string? _deviceCode;
+
+    /// <summary>Kişinin profilinin açık olduğu bilgisayarın adı; son duyurusuna göre.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DeviceLabel))]
+    private string? _deviceName;
+
+    /// <summary>Gösterilen kod: "Megacircuit#5543"; bilinmiyorsa null.</summary>
+    [JsonIgnore] public string? PrettyDeviceCode => DeviceCode is { } code ? NetChat.Core.DeviceCode.Pretty(code) : null;
+
+    /// <summary>Kod ve cihaz adı: "Megacircuit#5543 • DESKTOP-A0WEHF"; kod bilinmiyorsa null.</summary>
+    [JsonIgnore] public string? DeviceLabel => DeviceCode is { } code ? NetChat.Core.DeviceCode.Label(code, DeviceName) : null;
 
     /// <summary>Cihaz kodunun kısa, ayırt edici etiketi ("#5543" ya da çakışmada "T#5543"); ChatService doldurur.</summary>
     [ObservableProperty]
@@ -78,7 +91,7 @@ public partial class Peer : ObservableObject
     /// "Ağdaki kişiler" listesinde adın altındaki satır: cihaz kodu. Durum zaten bölüm başlığında ve noktada görünür.
     /// Cihaz kodu göndermeyen eski sürümlerde durum metni gösterilir.
     /// </summary>
-    [JsonIgnore] public string NetworkSubtitle => DeviceCode ?? PresenceText;
+    [JsonIgnore] public string NetworkSubtitle => PrettyDeviceCode ?? PresenceText;
 
     /// <summary>Profil resmi (Base64 JPEG); yoksa null.</summary>
     [ObservableProperty]

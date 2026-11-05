@@ -45,7 +45,7 @@
                         <emoji:TextBlock x:Name="ProfileName" FontSize="20" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
                                          Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
                         <!-- Bu cihazın kodu: hangi profil açık olursa olsun aynıdır -->
-                        <TextBlock x:Name="DeviceCodeText" FontSize="13" Margin="0,2,0,0" ToolTip="Cihaz kodu: bu bilgisayarı tanıtır, değişmez"
+                        <TextBlock x:Name="DeviceCodeText" FontSize="13" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip="Cihaz kodu: bu bilgisayarı tanıtır, değişmez"
                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                         <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                             <ui:Button x:Name="PickAvatarButton" Content="Profil resmi seç" Icon="{ui:SymbolIcon Image20}" Click="OnPickAvatarClicked" />
@@ -245,6 +245,42 @@
                 </ui:CardControl.Header>
                 <ui:Button Content="Ağı yeniden tara" Icon="{ui:SymbolIcon ArrowSync20}" Click="OnRescanClicked" />
             </ui:CardControl>
+            <ui:CardExpander x:Name="UdpCard" Icon="{ui:SymbolIcon Globe24}" Margin="0,4,0,0">
+                <ui:CardExpander.Header>
+                    <StackPanel>
+                        <TextBlock Text="UDP Kanalı" Style="{StaticResource RowTitle}" />
+                        <TextBlock x:Name="UdpStatusText" Style="{StaticResource RowDesc}" />
+                    </StackPanel>
+                </ui:CardExpander.Header>
+                <StackPanel MaxWidth="560" HorizontalAlignment="Left">
+                    <TextBlock Text="Kaydedilmiş kanallar" Style="{StaticResource RowDesc}" Margin="2,0,0,4" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ComboBox x:Name="UdpChannelBox" DisplayMemberPath="Label" MinWidth="280"
+                                  AutomationProperties.Name="Kaydedilmiş kanallar" SelectionChanged="OnUdpChannelSelected" />
+                        <ui:Button x:Name="DeleteUdpChannelButton" Grid.Column="1" Content="Kanalı sil" Margin="8,0,0,0"
+                                   Icon="{ui:SymbolIcon Delete20}" Click="OnDeleteUdpChannelClicked" />
+                    </Grid>
+                    <TextBlock x:Name="NoUdpChannelsText" Text="Henüz kaydedilmiş kanal yok." Style="{StaticResource RowDesc}" Margin="2,4,0,0" />
+
+                    <TextBlock Text="UDP portu (1024-65535)" Style="{StaticResource RowDesc}" Margin="2,14,0,4" />
+                    <StackPanel Orientation="Horizontal">
+                        <ui:TextBox x:Name="UdpPortBox" Width="120" MaxLength="5" AutomationProperties.Name="UDP portu"
+                                    PreviewTextInput="OnUdpPortPreviewInput" TextChanged="OnUdpPortChanged" KeyDown="OnUdpPortKeyDown" />
+                        <ui:Button x:Name="ApplyUdpPortButton" Content="Uygula" Appearance="Primary" Margin="8,0,0,0" Click="OnApplyUdpPortClicked" />
+                        <ui:Button x:Name="DefaultUdpPortButton" Content="Varsayılan" Margin="6,0,0,0" Click="OnDefaultUdpPortClicked" />
+                        <ui:Button x:Name="SaveUdpChannelButton" Content="Kanalı kaydet" Margin="6,0,0,0"
+                                   Icon="{ui:SymbolIcon Save20}" Click="OnSaveUdpChannelClicked" />
+                    </StackPanel>
+                    <TextBlock x:Name="UdpError" Margin="2,6,0,0" FontSize="12" TextWrapping="Wrap" Visibility="Collapsed"
+                               Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
+                    <TextBlock Style="{StaticResource RowDesc}" Margin="2,10,0,0" TextWrapping="Wrap"
+                               Text="Yayın ve dinleme bu porttan yapılır. Yalnızca aynı kanaldaki kişiler birbirini görür; kanal değişince mevcut bağlantılar kesilir." />
+                </StackPanel>
+            </ui:CardExpander>
             <ui:CardExpander Icon="{ui:SymbolIcon LockClosed24}" Margin="0,0,0,4">
                 <ui:CardExpander.Header>
                     <StackPanel>

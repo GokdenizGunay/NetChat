@@ -27,8 +27,29 @@ public enum AppThemeMode
 /// Uygulama ayarları. Tek bir örnek vardır (App.Settings). Tüm ayarlar şifreli profil paketinde saklanır;
 /// cihazda ayar dosyası tutulmaz. Giriş ekranında varsayılanlar geçerlidir, girişte paketten doldurulur.
 /// </summary>
+/// <summary>Adıyla kaydedilmiş UDP kanalı (profilde saklanır).</summary>
+public sealed class UdpChannel
+{
+    public string Name { get; set; } = "";
+    public int Port { get; set; }
+
+    [JsonIgnore] public string Label => $"{Name} ({Port})";
+
+    public override string ToString() => Label;
+}
+
 public partial class AppSettings : ObservableObject
 {
+    public const int DefaultUdpPort = 45454;
+
+    public static bool IsValidUdpPort(int port) => port is >= 1024 and <= 65535;
+
+    /// <summary>Keşif yayını ve dinlemenin kullandığı UDP portu (kanal).</summary>
+    [ObservableProperty] private int _udpPort = DefaultUdpPort;
+
+    /// <summary>Kaydedilmiş kanallar.</summary>
+    [ObservableProperty] private List<UdpChannel> _udpChannels = [];
+
     [ObservableProperty] private string _displayName = "";
     /// <summary>Profil resmi (Base64 JPEG, <see cref="ProfilePicture"/>); yoksa null.</summary>
     [ObservableProperty] private string? _avatar;

@@ -17,6 +17,7 @@ public partial class WelcomeView : UserControl
     private UIElement? _current;
     private string? _newFolder;
     private string? _pendingPath;
+    private ProfileEntry? _quickEntry;
 
     public WelcomeView()
     {
@@ -43,10 +44,58 @@ public partial class WelcomeView : UserControl
             _current = null;
             ShowLoginPanel(path);
         }
+        else if (ProfileCatalog.Last() is { } last)
+        {
+            ShowQuickLogin(last);
+        }
         else
         {
             Anim.FadeIn(HomePanel, fromY: 14, ms: 420, delayMs: 300);
         }
+    }
+
+    // ------------------------------------------------------------------ Son profille hızlı giriş
+
+    private void ShowQuickLogin(ProfileEntry last)
+    {
+        _quickEntry = last;
+        TitleText.Text = $"Tekrar hoşgeldin {last.Name}";
+        SmallTitle.Visibility = Visibility.Visible;
+        Anim.FadeIn(SmallTitle, fromY: 14, ms: 420);
+        SubtitleText.Visibility = Visibility.Collapsed;
+        HomePanel.Visibility = Visibility.Collapsed;
+        _current = QuickPanel;
+        Anim.FadeIn(QuickPanel, fromY: 14, ms: 420, delayMs: 300);
+        Dispatcher.BeginInvoke(() => QuickPassword.Focus(), System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    /// <summary>Hızlı giriş görünümünden klasik başlığa döner.</summary>
+    private void LeaveQuickLogin()
+    {
+        if (_quickEntry == null) return;
+        _quickEntry = null;
+        TitleText.Text = "NetChat 26";
+        SmallTitle.Visibility = Visibility.Collapsed;
+        SubtitleText.Visibility = Visibility.Visible;
+        QuickPassword.Password = "";
+        SetError(QuickError, null);
+    }
+
+    private void OnOtherProfileClicked(object sender, RoutedEventArgs e)
+    {
+        LeaveQuickLogin();
+        ShowPanel(HomePanel);
+    }
+
+    private void OnQuickKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) OnQuickSignInClicked(sender, e);
+    }
+
+    private async void OnQuickSignInClicked(object sender, RoutedEventArgs e)
+    {
+        if (_quickEntry is not { } entry) return;
+        await SignInAsync(entry, QuickPassword, QuickError, QuickPanel);
     }
 
     private void OnNetworkChanged(NetworkStatus status) => Dispatcher.BeginInvoke(() => ShowStatus(status));
@@ -133,6 +182,7 @@ public partial class WelcomeView : UserControl
             _pendingPath = path;
             return;
         }
+        LeaveQuickLogin();
         var profiles = ProfileCatalog.List();
         ProfileBox.ItemsSource = profiles;
         ProfileBox.SelectedItem = profiles.FirstOrDefault();
@@ -190,14 +240,20 @@ public partial class WelcomeView : UserControl
             SetError(LoginError, "Bir profil seçin veya bir profil dosyasını aktarın.");
             return;
         }
-        var password = LoginPassword.Password ?? "";
+        await SignInAsync(entry, LoginPassword, LoginError, LoginPanel);
+    }
+
+    /// <summary>Profili açar; hata olursa <paramref name="returnPanel"/> paneline dönüp hatayı gösterir.</summary>
+    private async Task SignInAsync(ProfileEntry entry, Wpf.Ui.Controls.PasswordBox passwordBox, TextBlock errorBlock, UIElement returnPanel)
+    {
+        var password = passwordBox.Password ?? "";
         if (password.Length == 0)
         {
-            SetError(LoginError, "Şifrenizi girin.");
+            SetError(errorBlock, "Şifrenizi girin.");
             return;
         }
 
-        SetError(LoginError, null);
+        SetError(errorBlock, null);
         BusyText.Text = "Profil açılıyor…";
         ShowPanel(BusyPanel);
         try
@@ -216,11 +272,11 @@ public partial class WelcomeView : UserControl
                 _ => "Profil açılamadı: " + ex.Message,
             };
             if (ex is not WrongPasswordException) Log.Error("Giriş başarısız", ex);
-            ShowPanel(LoginPanel, () =>
+            ShowPanel(returnPanel, () =>
             {
-                SetError(LoginError, message);
-                LoginPassword.Password = "";
-                LoginPassword.Focus();
+                SetError(errorBlock, message);
+                passwordBox.Password = "";
+                passwordBox.Focus();
             });
         }
     }

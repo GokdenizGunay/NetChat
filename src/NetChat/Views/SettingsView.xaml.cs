@@ -9,6 +9,7 @@ using NetChat.Core;
 using NetChat.Models;
 using NetChat.Net;
 using Wpf.Ui.Controls;
+using TextBlock = System.Windows.Controls.TextBlock;
 
 namespace NetChat.Views;
 
@@ -40,6 +41,7 @@ public partial class SettingsView : UserControl
             if (IsVisible) ShowNetwork(App.Network.Current);
         };
         ShowNetwork(App.Network.Current);
+        LoadUdp();
     }
 
     private void OnSettingsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -65,7 +67,7 @@ public partial class SettingsView : UserControl
     private void LoadProfile()
     {
         ProfileName.Text = _settings.DisplayName;
-        DeviceCodeText.Text = DeviceCode.Label(DeviceCode.Current, _settings.DisplayName);
+        DeviceCodeText.Text = DeviceCode.Label(DeviceCode.Current, DeviceCode.DeviceName);
         ProfileAvatar.Text = Conversation.MakeInitials(_settings.DisplayName);
         ProfileAvatar.Key = App.Identity.Id;
         ProfileAvatar.Image = ProfilePicture.Decode(_settings.Avatar);
@@ -194,6 +196,144 @@ public partial class SettingsView : UserControl
         return d as ShellView;
     }
 
+    // ------------------------------------------------------------------ UDP kanalı
+
+    /// <summary>UDP kanalı alanını açar, port kutusunu görünür yapıp odaklar.</summary>
+    public void FocusUdpPort()
+    {
+        UdpCard.IsExpanded = true;
+        // Sekme geçişi ve kartın açılması yerleşene kadar bekle.
+        Dispatcher.BeginInvoke(() =>
+        {
+            UdpPortBox.BringIntoView();
+            UdpPortBox.Focus();
+            UdpPortBox.SelectAll();
+        }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+    }
+
+    private bool _loadingUdp;
+
+    private void LoadUdp()
+    {
+        _loadingUdp = true;
+        var port = App.Chat.UdpPort;
+        var channels = _settings.UdpChannels;
+        UdpChannelBox.ItemsSource = channels.OrderBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+        UdpChannelBox.SelectedItem = (UdpChannelBox.ItemsSource as List<UdpChannel>)?.FirstOrDefault(c => c.Port == port);
+        UdpChannelBox.IsEnabled = channels.Count > 0;
+        NoUdpChannelsText.Visibility = channels.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+        UdpPortBox.Text = port.ToString();
+        var active = UdpChannelBox.SelectedItem as UdpChannel;
+        UdpStatusText.Text = active != null ? $"Kanal: {active.Label}"
+            : port == AppSettings.DefaultUdpPort ? $"Varsayılan kanal ({port})"
+            : $"Özel kanal ({port})";
+        _loadingUdp = false;
+        SetUdpError(null);
+        UpdateUdpButtons();
+    }
+
+    private bool TryGetTypedPort(out int port) =>
+        int.TryParse(UdpPortBox.Text, out port) && AppSettings.IsValidUdpPort(port);
+
+    private void UpdateUdpButtons()
+    {
+        var valid = TryGetTypedPort(out var typed);
+        ApplyUdpPortButton.IsEnabled = valid && typed != App.Chat.UdpPort;
+        SaveUdpChannelButton.IsEnabled = valid;
+        DefaultUdpPortButton.IsEnabled = App.Chat.UdpPort != AppSettings.DefaultUdpPort;
+        DeleteUdpChannelButton.IsEnabled = UdpChannelBox.SelectedItem != null;
+    }
+
+    private void SetUdpError(string? message)
+    {
+        UdpError.Text = message ?? "";
+        UdpError.Visibility = message != null ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnUdpPortPreviewInput(object sender, TextCompositionEventArgs e) =>
+        e.Handled = !e.Text.All(char.IsAsciiDigit);
+
+    private void OnUdpPortChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_loadingUdp) return;
+        SetUdpError(UdpPortBox.Text.Length > 0 && !TryGetTypedPort(out _) ? "Port 1024 ile 65535 arasında bir sayı olmalı." : null);
+        UpdateUdpButtons();
+    }
+
+    private async void OnUdpPortKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && TryGetTypedPort(out var port)) await ApplyUdpPortAsync(port);
+    }
+
+    private async void OnApplyUdpPortClicked(object sender, RoutedEventArgs e)
+    {
+        if (TryGetTypedPort(out var port)) await ApplyUdpPortAsync(port);
+    }
+
+    private async void OnDefaultUdpPortClicked(object sender, RoutedEventArgs e) =>
+        await ApplyUdpPortAsync(AppSettings.DefaultUdpPort);
+
+    private async void OnUdpChannelSelected(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateUdpButtons();
+        if (_loadingUdp || UdpChannelBox.SelectedItem is not UdpChannel channel) return;
+        await ApplyUdpPortAsync(channel.Port);
+    }
+
+    private async Task ApplyUdpPortAsync(int port)
+    {
+        if (port == App.Chat.UdpPort)
+        {
+            LoadUdp();
+            return;
+        }
+        var ok = await App.Chat.ChangeUdpPortAsync(port);
+        LoadUdp();
+        ShowNetwork(App.Network.Current);
+        if (!ok) SetUdpError($"{port} portu açılamadı. Başka bir port deneyin.");
+    }
+
+    private async void OnSaveUdpChannelClicked(object sender, RoutedEventArgs e)
+    {
+        if (!TryGetTypedPort(out var port) || FindShell() is not { } shell) return;
+        var channels = _settings.UdpChannels;
+        var existing = channels.FirstOrDefault(c => c.Port == port);
+        if (existing != null)
+        {
+            SetUdpError($"Bu port zaten \"{existing.Name}\" adıyla kayıtlı.");
+            return;
+        }
+        var nameBox = new Wpf.Ui.Controls.TextBox { PlaceholderText = "Kanal adı", MaxLength = 32 };
+        var nameError = new TextBlock { FontSize = 12, Margin = new Thickness(2, 6, 0, 0), Visibility = Visibility.Collapsed, TextWrapping = TextWrapping.Wrap };
+        nameError.SetResourceReference(TextBlock.ForegroundProperty, "SystemFillColorCriticalBrush");
+        var hint = new TextBlock { Text = $"Port {port} bu adla kaydedilecek.", FontSize = 13, Margin = new Thickness(0, 0, 0, 10) };
+        hint.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorSecondaryBrush");
+        var body = new StackPanel { Children = { hint, nameBox, nameError } };
+        bool NameTaken() => channels.Any(c => string.Equals(c.Name, nameBox.Text.Trim(), StringComparison.CurrentCultureIgnoreCase));
+        var saved = await shell.DialogHost.ShowAsync("Kanalı kaydet", body, "Kaydet",
+            canSubmit: () => nameBox.Text.Trim().Length > 0 && !NameTaken(),
+            bindRefresh: refresh => nameBox.TextChanged += (_, _) =>
+            {
+                nameError.Text = NameTaken() ? "Bu adla kayıtlı bir kanal var." : "";
+                nameError.Visibility = nameError.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+                refresh();
+            });
+        if (!saved) return;
+        _settings.UdpChannels = [.. channels, new UdpChannel { Name = nameBox.Text.Trim(), Port = port }];
+        LoadUdp();
+    }
+
+    private async void OnDeleteUdpChannelClicked(object sender, RoutedEventArgs e)
+    {
+        if (UdpChannelBox.SelectedItem is not UdpChannel channel || FindShell() is not { } shell) return;
+        var message = channel.Port == App.Chat.UdpPort
+            ? $"\"{channel.Label}\" listeden silinecek. Şu an kullanılan port değişmez."
+            : $"\"{channel.Label}\" listeden silinecek.";
+        if (!await shell.DialogHost.ConfirmAsync("Kanal silinsin mi?", message, "Sil", danger: true)) return;
+        _settings.UdpChannels = _settings.UdpChannels.Where(c => c.Name != channel.Name).ToList();
+        LoadUdp();
+    }
+
     private void OnThemeChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!IsInitialized || ThemeBox.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
@@ -206,7 +346,8 @@ public partial class SettingsView : UserControl
         {
             ConnectionKind.Wireless => SymbolRegular.Wifi124,
             ConnectionKind.Wired => SymbolRegular.PlugConnected24,
-            _ => SymbolRegular.GlobeProhibited24,
+            // 24 boyutlu sürümün kodu 0xFFFF'in üstünde; WPF-UI onu tek karaktere kesip "н" harfi gösteriyor.
+            _ => SymbolRegular.GlobeProhibited20,
         };
         NetTitle.Text = status.Kind switch
         {
@@ -216,7 +357,7 @@ public partial class SettingsView : UserControl
         };
         var online = App.Chat.Peers.Count(p => p.IsOnline);
         NetDesc.Text = status.IsConnected
-            ? $"{status.AdapterName} · IP {status.Address} · TCP {App.Chat.TcpPort} · UDP keşif {DiscoveryService.Port} · {online} kişi çevrimiçi"
+            ? $"{status.AdapterName} · IP {status.Address} · TCP {App.Chat.TcpPort} · UDP keşif {App.Chat.UdpPort} · {online} kişi çevrimiçi"
             : "Diğer cihazları görmek için bir Wi-Fi veya kablolu ağa bağlanın.";
     }
 
@@ -311,6 +452,7 @@ public partial class SettingsView : UserControl
         try
         {
             session.MoveTo(folder);
+            ProfileCatalog.RememberLast(session.FilePath);
             UpdateProfileLocation();
             App.Chat.ShowInfo(folder == null ? "Profil bu bilgisayara taşındı." : $"Profil taşındı: {session.FilePath}");
         }

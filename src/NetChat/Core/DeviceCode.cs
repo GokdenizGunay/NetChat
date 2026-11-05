@@ -47,8 +47,16 @@ public static class DeviceCode
     /// <summary>Bu cihazın kodu.</summary>
     public static string Current => Lazy.Value.Code;
 
-    /// <summary>Uygulamada gösterilen biçim: cihaz kodu ve o cihazda açık profilin adı ("megacircuit#5543-elaa").</summary>
-    public static string Label(string code, string profileName) => $"{code}-{profileName}";
+    /// <summary>Bu bilgisayarın adı (ör. "DESKTOP-A0WEHF").</summary>
+    public static string DeviceName => Environment.MachineName;
+
+    /// <summary>Gösterilecek biçim: ilk harf büyük ("Megacircuit#5543"). Ağda küçük harfle taşınır.</summary>
+    public static string Pretty(string code) =>
+        code.Length == 0 ? code : char.ToUpperInvariant(code[0]) + code[1..];
+
+    /// <summary>Kod ve cihaz adı: "Megacircuit#5543 • DESKTOP-A0WEHF"; cihaz adı bilinmiyorsa yalnızca kod.</summary>
+    public static string Label(string code, string? deviceName) =>
+        string.IsNullOrWhiteSpace(deviceName) ? Pretty(code) : $"{Pretty(code)} • {deviceName}";
 
     /// <summary>
     /// Kısa etiket: "#5543"; <paramref name="letters"/> &gt; 0 ise kodun numaradan önceki son harfleri büyük harfle
